@@ -1,0 +1,30 @@
+# let the baudtime run as the only role of gateway
+tcp_port = "8088"
+http_port = "80"
+max_conn = 10000
+namespace = "n1"
+
+[etcd_common]
+  endpoints = ["11.24.102.245:2379", "11.24.102.246:2379", "11.24.17.250:2379"]
+  dial_timeout = "5s"
+  rw_timeout = "15s"
+  retry_num = 2
+  retry_interval = "2s"
+
+[gateway]
+  conn_num_per_backend = 5
+  [gateway.route]
+    route_info_ttl = "8784h"
+    shard_group_cap = 1
+  [gateway.appender]
+    sample_num_batch_send = 300
+    max_interval_send = "10s"
+  [gateway.query_engine]
+    concurrency = 50
+    timeout = "2m"
+
+[jaeger]
+  sampler_type = "ratelimiting"
+  sample_num_per_sec = 10
+  agent_host_port = ""
+  collector_endpoint = "http://xx.xx.com/api/traces"

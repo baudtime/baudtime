@@ -1,0 +1,11 @@
+.idea/
+
+*.exe
+*.log
+meta.json
+cmd/baudtime/baudtime
+cmd/console/console
+cmd/**/*prof*
+cmd/**/*lock
+cmd/**/wal/*
+cmd/**/*.tmp

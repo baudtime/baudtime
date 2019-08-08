@@ -1,0 +1,32 @@
+# let the baudtime run as the only role of backend
+tcp_port = "8088"
+http_port = "80"
+max_conn = 10000
+namespace = "n1"
+
+[etcd_common]
+  endpoints = ["11.24.102.245:2379", "11.24.102.246:2379", "11.24.17.250:2379"]
+  dial_timeout = "5s"
+  rw_timeout = "15s"
+  retry_num = 2
+  retry_interval = "2s"
+
+[storage]
+  [storage.tsdb]
+    path = "/tmp/tsdb"
+    lookback_delta = "5s"
+    retention_duration = "360h"
+    block_ranges = [3600000, 14400000, 28800000, 86400000]
+    enable_wal = true
+  [storage.stat_report]
+    heartbeart_interval = "30s"
+    session_expire_ttl = "30s"
+  [storage.replication]
+    handleoff_size = "256m"
+    heartbeart_interval = "30s"
+
+[jaeger]
+  sampler_type = "ratelimiting"
+  sample_num_per_sec = 10
+  agent_host_port = ""
+  collector_endpoint = "http://xx.xx.com/api/traces"

@@ -1,0 +1,15 @@
+syntax = "proto3";
+package pb;
+
+option go_package = "pb";
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+enum CtrlCode {
+    CloseRead = 0;
+    CloseWrite = 1;
+}
+
+message ConnCtrl {
+    CtrlCode code = 1;
+}

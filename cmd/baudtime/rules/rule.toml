@@ -1,0 +1,25 @@
+[[groups]]
+  name = "count"
+  interval = "60s"
+
+  [[groups.rules]]
+    record = "app:cnt:sum"
+    expr = "sum(cnt) without (app)"
+
+  [[groups.rules]]
+    record = "app:cnt:max"
+    expr = "max(cnt) without (app)"
+
+[[groups]]
+  name = "userC"
+  interval = "300s"
+
+  [[groups.rules]]
+    record = "app:userC:sum"
+    expr = "sum(cnt) without (app)"
+
+  [[groups.rules]]
+    record = "app:userC:max"
+    expr = "max(cnt) without (app)"
+
+
