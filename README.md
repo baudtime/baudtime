@@ -1,9 +1,10 @@
 # Baudtime
-Baudtime lets Prometheus horizontally scalable, and provide you an extremely high write throughput.
+
+The goal of Baudtime is to make Prometheus more scalable, and provide extremely high write throughput.
 
 
 ## Features
-* Designed for high throughput via tcp pipeline
+* Designed for high throughput via TCP pipeline
 * Horizontally scalable, you can send the metrics to multiple machines in one cluster and run "globally aggregated" across all data in a single place
 * Highly available, data is replicated between master and its slaves and master can be failovered automatically by promoting a slave to be the new master
 * Compatible with PromQL, so you can use functions over functions
@@ -21,10 +22,10 @@ Baudtime lets Prometheus horizontally scalable, and provide you an extremely hig
 ![architecture](https://raw.githubusercontent.com/baudtime/baudtime.github.io/master/baudtime.png)
 
 ## Contributing
-We are dedicate to building high-quality time series storage. So any thoughts, pull requests, or issues are appreciated.
+We are dedicate to building a high-quality time-series database. So any thoughts, pull requests, or issues are appreciated.
 
 ## Thanks
-Thanks prometheus, it is a very awesome application, baudtime is built on the top of it.
+Baudtime is built on top of the awesome Prometheus(https://prometheus.io/)
 
 ## License
 Licensed under the [Apache License, Version 2.0](https://www.apache.org/licenses/LICENSE-2.0).
