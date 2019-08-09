@@ -82,5 +82,7 @@ func Init(appName string) {
 	Logger = level.NewFilter(log.NewLogfmtLogger(LogWriter), levelOpt)
 	Logger = log.With(Logger, "time", log.TimestampFormat(time.Now, "2006-01-02T15:04:05.999999999"), "caller", log.DefaultCaller)
 
-	LoadConfig(ConfigFilePath)
+	if err = LoadConfig(ConfigFilePath); err != nil {
+		panic(err)
+	}
 }
