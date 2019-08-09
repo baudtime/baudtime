@@ -29,9 +29,41 @@ import (
 	"github.com/pkg/errors"
 )
 
-var (
-	ErrKeyNotFound = errors.New("key not found in etcd")
-)
+type ClientRefer struct {
+	cli *clientv3.Client
+	ref int32
+	sync.Mutex
+}
+
+func (r *ClientRefer) Ref() (*clientv3.Client, error) {
+	r.Lock()
+	defer r.Unlock()
+
+	if r.cli == nil {
+		cli, err := clientv3.New(clientv3.Config{
+			Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
+			DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
+		})
+		if err != nil {
+			return nil, err
+		}
+		r.cli = cli
+	}
+
+	r.ref++
+	return r.cli, nil
+}
+
+func (r *ClientRefer) UnRef() {
+	r.Lock()
+	defer r.Unlock()
+
+	r.ref--
+	if r.ref == 0 && r.cli != nil {
+		r.cli.Close()
+		r.cli = nil
+	}
+}
 
 type lease struct {
 	day     uint64
@@ -39,7 +71,11 @@ type lease struct {
 	sync.Mutex
 }
 
-var leases [366]lease
+var (
+	ErrKeyNotFound = errors.New("key not found in etcd")
+	clientRef      ClientRefer
+	leases         [366]lease
+)
 
 func getEtcdLease(day uint64) (clientv3.LeaseID, error) {
 	idx := day % 366
@@ -54,14 +90,11 @@ func getEtcdLease(day uint64) (clientv3.LeaseID, error) {
 
 	ttl := int64(vars.Cfg.Gateway.Route.RouteInfoTTL) / 1e9
 
-	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
-		DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
-	})
+	cli, err := clientRef.Ref()
 	if err != nil {
 		return -1, err
 	}
-	defer cli.Close()
+	defer clientRef.UnRef()
 
 	if l.leaseID != clientv3.NoLease {
 		cli.Revoke(context.Background(), l.leaseID)
@@ -82,14 +115,11 @@ func exist(k string) (bool, error) {
 	var resp *clientv3.GetResponse
 
 	er := redo.Retry(time.Duration(vars.Cfg.EtcdCommon.RetryInterval), vars.Cfg.EtcdCommon.RetryNum, func() (bool, error) {
-		cli, err := clientv3.New(clientv3.Config{
-			Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
-			DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
-		})
+		cli, err := clientRef.Ref()
 		if err != nil {
 			return true, err
 		}
-		defer cli.Close()
+		defer clientRef.UnRef()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(2*vars.Cfg.EtcdCommon.RWTimeout))
 
@@ -107,14 +137,11 @@ func exist(k string) (bool, error) {
 
 func etcdGet(k string, v interface{}) error {
 	return redo.Retry(time.Duration(vars.Cfg.EtcdCommon.RetryInterval), vars.Cfg.EtcdCommon.RetryNum, func() (bool, error) {
-		cli, err := clientv3.New(clientv3.Config{
-			Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
-			DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
-		})
+		cli, err := clientRef.Ref()
 		if err != nil {
 			return true, err
 		}
-		defer cli.Close()
+		defer clientRef.UnRef()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.EtcdCommon.RWTimeout))
 
@@ -149,14 +176,11 @@ func etcdGet(k string, v interface{}) error {
 func etcdGetWithPrefix(prefix string) (*clientv3.GetResponse, error) {
 	var resp *clientv3.GetResponse
 	er := redo.Retry(time.Duration(vars.Cfg.EtcdCommon.RetryInterval), vars.Cfg.EtcdCommon.RetryNum, func() (bool, error) {
-		cli, err := clientv3.New(clientv3.Config{
-			Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
-			DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
-		})
+		cli, err := clientRef.Ref()
 		if err != nil {
 			return true, err
 		}
-		defer cli.Close()
+		defer clientRef.UnRef()
 
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.EtcdCommon.RWTimeout))
 
@@ -215,14 +239,11 @@ func etcdPut(k string, v interface{}, leaseID clientv3.LeaseID) error {
 }
 
 func mutexRun(lock string, f func(session *concurrency.Session) error) error {
-	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
-		DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
-	})
+	cli, err := clientRef.Ref()
 	if err != nil {
 		return err
 	}
-	defer cli.Close()
+	defer clientRef.UnRef()
 
 	session, err := concurrency.NewSession(cli, concurrency.WithTTL(20))
 	if err != nil {

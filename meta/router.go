@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/baudtime/baudtime/msg/pb"
+	tm "github.com/baudtime/baudtime/util/time"
 	"github.com/cespare/xxhash"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
@@ -27,7 +28,7 @@ import (
 )
 
 var (
-	baseTime, _      = time.Parse("2006-01-02 15:04:05", "2018-01-01 00:00:00")
+	baseTime, _      = time.Parse("2006-01-02 15:04:05", "2019-01-01 00:00:00")
 	globalRouter     *router
 	globalRouterOnce sync.Once
 )
@@ -144,5 +145,5 @@ func (r *router) GetShardIDsByTimeSpan(from, to time.Time, matchers ...*labels.M
 }
 
 func day(t time.Time) uint64 {
-	return uint64(t.Sub(baseTime).Hours() / 24)
+	return uint64(t.Sub(baseTime) / tm.Day)
 }
