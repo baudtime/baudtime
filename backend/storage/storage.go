@@ -177,8 +177,8 @@ func New(db *tsdb.DB) *Storage {
 		AddReqHandler: &AddReqHandler{
 			appender: db.Appender,
 			addStat:  &AddStat{},
-			symbolsK: syn.NewMap(1024, syn.StringHash),
-			symbolsV: syn.NewMap(1<<14, syn.StringHash),
+			symbolsK: syn.NewMap(1024),
+			symbolsV: syn.NewMap(1 << 14),
 		},
 		ReplicateManager: replication.NewReplicateManager(db),
 	}

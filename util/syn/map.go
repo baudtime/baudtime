@@ -16,10 +16,9 @@
 package syn
 
 import (
-	"fmt"
-	"reflect"
 	"sync"
 
+	"github.com/baudtime/baudtime/util"
 	"github.com/cespare/xxhash"
 )
 
@@ -27,15 +26,6 @@ const (
 	DefaultShardCount = 1 << 8
 	DefaultShardCap   = 1 << 8
 )
-
-type HashFunc func(key interface{}) uint64
-
-var StringHash HashFunc = func(key interface{}) uint64 {
-	if s, ok := key.(string); ok {
-		return xxhash.Sum64String(s)
-	}
-	panic(fmt.Sprintf("not support for %v", reflect.TypeOf(key)))
-}
 
 type entry struct {
 	k interface{}
@@ -69,10 +59,9 @@ type Map struct {
 	shards     []*shard
 	entryPool  sync.Pool
 	shardCount int
-	hash       HashFunc
 }
 
-func NewMap(shardCount int, hashFn HashFunc) *Map {
+func NewMap(shardCount int) *Map {
 	// must be a power of 2
 	if shardCount < 1 {
 		shardCount = DefaultShardCount
@@ -83,7 +72,6 @@ func NewMap(shardCount int, hashFn HashFunc) *Map {
 	m := &Map{
 		shards:     make([]*shard, shardCount),
 		shardCount: shardCount,
-		hash:       hashFn,
 	}
 
 	m.entryPool.New = func() interface{} {
@@ -152,4 +140,16 @@ func (m *Map) ForEach(fn func(key, val interface{}) bool) bool {
 	}
 
 	return false
+}
+
+func (m *Map) hash(key interface{}) uint64 {
+	if s, ok := key.(string); ok {
+		return xxhash.Sum64(util.YoloBytes(s))
+	}
+
+	if b, ok := key.([]byte); ok {
+		return xxhash.Sum64(b)
+	}
+
+	panic("not support")
 }

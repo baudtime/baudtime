@@ -25,12 +25,14 @@ import (
 )
 
 var (
-	pointsPool = sync.Pool{
+	seriesPool = sync.Pool{
 		New: func() interface{} {
-			return make([]pb.Point, 0, 60)
+			return &pb.Series{
+				Points: make([]pb.Point, 0, 60),
+			}
 		},
 	}
-	seriesPool = &sync.Pool{
+	seriesSlicePool = &sync.Pool{
 		New: func() interface{} {
 			return make([]*pb.Series, 0)
 		},
@@ -60,7 +62,7 @@ OUTLOOP:
 func (m seriesHashMap) set(hash uint64, s *pb.Series) {
 	ss, found := m[hash]
 	if !found {
-		ss = seriesPool.Get().([]*pb.Series)
+		ss = seriesSlicePool.Get().([]*pb.Series)
 	}
 	m[hash] = append(ss, s)
 }
@@ -68,13 +70,14 @@ func (m seriesHashMap) set(hash uint64, s *pb.Series) {
 func (m seriesHashMap) del(hash uint64) {
 	if ss, found := m[hash]; found {
 		delete(m, hash)
-		seriesPool.Put(ss[:0])
+		seriesSlicePool.Put(ss[:0])
 	}
 }
 
 type appender struct {
-	client Client
-	series seriesHashMap
+	client  Client
+	series  seriesHashMap
+	toFlush backendpb.AddRequest
 }
 
 func newAppender(shardID string, localStorage *storage.Storage) (*appender, error) {
@@ -94,10 +97,8 @@ func newAppender(shardID string, localStorage *storage.Storage) (*appender, erro
 func (app *appender) Add(l []pb.Label, t int64, v float64, hash uint64) error {
 	s := app.series.get(hash, l)
 	if s == nil {
-		s = &pb.Series{
-			Labels: l,
-			Points: pointsPool.Get().([]pb.Point),
-		}
+		s = seriesPool.Get().(*pb.Series)
+		s.Labels = l
 		app.series.set(hash, s)
 	}
 	s.Points = append(s.Points, pb.Point{T: t, V: v})
@@ -105,19 +106,18 @@ func (app *appender) Add(l []pb.Label, t int64, v float64, hash uint64) error {
 }
 
 func (app *appender) Flush() error {
-	series := seriesPool.Get().([]*pb.Series)
-
 	for k, ss := range app.series {
-		series = append(series, ss...)
+		app.toFlush.Series = append(app.toFlush.Series, ss...)
 		app.series.del(k)
 	}
-	err := app.client.Add(context.TODO(), &backendpb.AddRequest{Series: series})
+	err := app.client.Add(context.TODO(), &app.toFlush)
 
-	for _, s := range series {
+	for _, s := range app.toFlush.Series {
 		s.Labels = nil
-		pointsPool.Put(s.Points[:0])
+		s.Points = s.Points[:0]
+		seriesPool.Put(s)
 	}
-	seriesPool.Put(series[:0])
+	app.toFlush.Series = app.toFlush.Series[:0]
 
 	if err != nil {
 		return errors.Wrap(err, "failed to flush series")
