@@ -17,8 +17,8 @@ package storage
 
 import (
 	"fmt"
-	"github.com/baudtime/baudtime/msg/pb"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/vars"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
@@ -43,7 +43,7 @@ func TestAPI_Bench(t *testing.T) {
 		//lastCommitTime: time.Now().Unix(),
 	}
 
-	lb := []pb.Label{
+	lb := []msg.Label{
 		{"__name__", "test"},
 		{"host", "localhost"},
 		{"app", "proxy"},
@@ -53,15 +53,15 @@ func TestAPI_Bench(t *testing.T) {
 
 	errNo, total := 0, 0
 	begin := time.Now()
-	req := &backendpb.AddRequest{
-		Series: []*pb.Series{{
+	req := &backendmsg.AddRequest{
+		Series: []*msg.Series{{
 			Labels: lb,
 		}},
 	}
 
 	for i := 0; i < 20000000; i++ {
 		now := time.Now().UnixNano() / 1e6
-		req.Series[0].Points = []pb.Point{
+		req.Series[0].Points = []msg.Point{
 			{now - 2, 5},
 		}
 
@@ -102,7 +102,7 @@ func TestAPI_Bench_Orig(t *testing.T) {
 	for i := 0; i < 20000000; i++ {
 		now := time.Now().UnixNano() / 1e6
 
-		p := pb.Point{now - 2, 5}
+		p := msg.Point{now - 2, 5}
 		_, err = app.Add(lb, p.T, p.V)
 		if err != nil {
 			errNo++

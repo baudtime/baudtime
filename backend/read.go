@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/baudtime/baudtime/msg/pb"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/util"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -49,7 +49,7 @@ type querier struct {
 // Select implements Querier and uses the given matchers to read series
 // sets from the Client.
 func (q *querier) Select(selectParams *SelectParams, matchers ...*labels.Matcher) (SeriesSet, error) {
-	selectRequest := &backendpb.SelectRequest{
+	selectRequest := &backendmsg.SelectRequest{
 		Mint:     q.mint,
 		Maxt:     q.maxt,
 		Interval: selectParams.Step,
@@ -64,7 +64,7 @@ func (q *querier) Select(selectParams *SelectParams, matchers ...*labels.Matcher
 
 // LabelValues implements Querier and is a noop.
 func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]string, error) {
-	labelValuesRequest := &backendpb.LabelValuesRequest{
+	labelValuesRequest := &backendmsg.LabelValuesRequest{
 		Name:     name,
 		Matchers: util.MatchersToProto(matchers),
 	}
@@ -81,7 +81,7 @@ func (q *querier) Close() error {
 }
 
 // FromQueryResult unpacks a QueryResult proto.
-func FromQueryResult(res *backendpb.SelectResponse) SeriesSet {
+func FromQueryResult(res *backendmsg.SelectResponse) SeriesSet {
 	series := make([]Series, 0, len(res.Series))
 	for _, ts := range res.Series {
 		lbls := util.ProtoToLabels(ts.Labels)
@@ -145,7 +145,7 @@ func (c *concreteSeriesSet) Err() error {
 // concreteSeries implementes Series.
 type concreteSeries struct {
 	labels  labels.Labels
-	samples []pb.Point
+	samples []msg.Point
 }
 
 func (c *concreteSeries) Labels() labels.Labels {

@@ -44,7 +44,7 @@ func (msg *Message) SetRaw(raw msg.Message) {
 
 func (msg *Message) SizeOfRaw() int {
 	if msg.Message != nil {
-		return msg.Message.Size()
+		return msg.Message.Msgsize()
 	}
 	return 0
 }
@@ -75,11 +75,15 @@ func (codec *MsgCodec) Encode(msg Message, b []byte) (int, error) {
 	written += n
 
 	if raw != nil {
-		n, err := raw.MarshalTo(b[written:])
+		if cap(b)-written < raw.Msgsize() {
+			return 0, MsgSizeOverflow
+		}
+
+		o, err := raw.MarshalMsg(b[written:written])
 		if err != nil {
 			return 0, err
 		}
-		written += n
+		written += len(o)
 	}
 
 	return written, nil
@@ -98,9 +102,9 @@ func (codec *MsgCodec) Decode(b []byte) (Message, error) {
 	opaque, n := binary.Uvarint(b[1 : 1+binary.MaxVarintLen64])
 
 	//get message proto
-	raw := Make(msgType)
+	raw := Get(msgType)
 	if raw != nil {
-		err = raw.Unmarshal(b[1+n:])
+		_, err = raw.UnmarshalMsg(b[1+n:])
 	}
 
 	if err != nil {

@@ -27,8 +27,8 @@ import (
 
 	"github.com/baudtime/baudtime/backend/storage/replication"
 	"github.com/baudtime/baudtime/meta"
-	"github.com/baudtime/baudtime/msg/pb"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/util/syn"
 	tm "github.com/baudtime/baudtime/util/time"
 	"github.com/baudtime/baudtime/vars"
@@ -42,13 +42,13 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-func selectVectors(q tsdb.Querier, matchers []*backendpb.Matcher, it *tm.TimestampIter) ([]*pb.Series, error) {
+func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, it *tm.TimestampIter) ([]*msg.Series, error) {
 	ms, err := ProtoToMatchers(matchers)
 	if err != nil {
 		return nil, err
 	}
 
-	sMap := make(map[string]*pb.Series, 0)
+	sMap := make(map[string]*msg.Series, 0)
 
 	for it.Next() {
 		ts := it.At()
@@ -89,24 +89,24 @@ func selectVectors(q tsdb.Querier, matchers []*backendpb.Matcher, it *tm.Timesta
 
 			lblStr := curSeries.Labels().String()
 			if s, ok := sMap[lblStr]; !ok {
-				sMap[lblStr] = &pb.Series{
+				sMap[lblStr] = &msg.Series{
 					Labels: LabelsToProto(curSeries.Labels()),
-					Points: []pb.Point{{V: v, T: t}},
+					Points: []msg.Point{{V: v, T: t}},
 				}
 			} else {
-				s.Points = append(s.Points, pb.Point{V: v, T: t})
+				s.Points = append(s.Points, msg.Point{V: v, T: t})
 			}
 		}
 	}
 
-	series := make([]*pb.Series, 0, len(sMap))
+	series := make([]*msg.Series, 0, len(sMap))
 	for _, v := range sMap {
 		series = append(series, v)
 	}
 	return series, nil
 }
 
-func selectNoInterval(q tsdb.Querier, matchers []*backendpb.Matcher, mint, maxt int64) ([]*pb.Series, error) {
+func selectNoInterval(q tsdb.Querier, matchers []*backendmsg.Matcher, mint, maxt int64) ([]*msg.Series, error) {
 	ms, err := ProtoToMatchers(matchers)
 	if err != nil {
 		return nil, err
@@ -117,8 +117,8 @@ func selectNoInterval(q tsdb.Querier, matchers []*backendpb.Matcher, mint, maxt 
 		return nil, err
 	}
 
-	series := make([]*pb.Series, 0)
-	allPoints := make([]pb.Point, 0)
+	series := make([]*msg.Series, 0)
+	allPoints := make([]msg.Point, 0)
 
 	for set.Next() {
 		start := len(allPoints)
@@ -142,7 +142,7 @@ func selectNoInterval(q tsdb.Querier, matchers []*backendpb.Matcher, mint, maxt 
 			}
 			// Values in the buffer are guaranteed to be smaller than maxt.
 			if t >= mint {
-				allPoints = append(allPoints, pb.Point{T: t, V: v})
+				allPoints = append(allPoints, msg.Point{T: t, V: v})
 			}
 		}
 
@@ -150,12 +150,12 @@ func selectNoInterval(q tsdb.Querier, matchers []*backendpb.Matcher, mint, maxt 
 		if ok {
 			t, v := it.Values()
 			if t == maxt && !value.IsStaleNaN(v) {
-				allPoints = append(allPoints, pb.Point{T: t, V: v})
+				allPoints = append(allPoints, msg.Point{T: t, V: v})
 			}
 		}
 
 		if len(allPoints[start:]) > 0 {
-			series = append(series, &pb.Series{
+			series = append(series, &msg.Series{
 				Labels: LabelsToProto(curSeries.Labels()),
 				Points: allPoints[start:],
 			})
@@ -184,8 +184,8 @@ func New(db *tsdb.DB) *Storage {
 	}
 }
 
-func (storage *Storage) HandleSelectReq(request *backendpb.SelectRequest) *backendpb.SelectResponse {
-	queryResponse := &backendpb.SelectResponse{Status: pb.StatusCode_Failed}
+func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *backendmsg.SelectResponse {
+	queryResponse := &backendmsg.SelectResponse{Status: msg.StatusCode_Failed}
 
 	var span opentracing.Span
 	wireContext, err := opentracing.GlobalTracer().Extract(opentracing.Binary, bytes.NewBuffer(request.SpanCtx))
@@ -195,7 +195,7 @@ func (storage *Storage) HandleSelectReq(request *backendpb.SelectRequest) *backe
 		span = opentracing.StartSpan("storage_select", opentracing.ChildOf(wireContext))
 	}
 	defer func() {
-		if queryResponse.Status == pb.StatusCode_Succeed {
+		if queryResponse.Status == msg.StatusCode_Succeed {
 			span.SetTag("seriesNum", len(queryResponse.Series))
 		} else {
 			span.SetTag("errorMsg", queryResponse.ErrorMsg)
@@ -217,7 +217,7 @@ func (storage *Storage) HandleSelectReq(request *backendpb.SelectRequest) *backe
 			return queryResponse
 		}
 
-		queryResponse.Status = pb.StatusCode_Succeed
+		queryResponse.Status = msg.StatusCode_Succeed
 		queryResponse.Series = series
 		return queryResponse
 	}
@@ -236,7 +236,7 @@ func (storage *Storage) HandleSelectReq(request *backendpb.SelectRequest) *backe
 			return queryResponse
 		}
 
-		queryResponse.Status = pb.StatusCode_Succeed
+		queryResponse.Status = msg.StatusCode_Succeed
 		queryResponse.Series = series
 		return queryResponse
 	}
@@ -245,8 +245,8 @@ func (storage *Storage) HandleSelectReq(request *backendpb.SelectRequest) *backe
 	return queryResponse
 }
 
-func (storage *Storage) HandleLabelValuesReq(request *backendpb.LabelValuesRequest) *pb.LabelValuesResponse {
-	queryResponse := &pb.LabelValuesResponse{Status: pb.StatusCode_Failed}
+func (storage *Storage) HandleLabelValuesReq(request *backendmsg.LabelValuesRequest) *msg.LabelValuesResponse {
+	queryResponse := &msg.LabelValuesResponse{Status: msg.StatusCode_Failed}
 
 	var span opentracing.Span
 	wireContext, err := opentracing.GlobalTracer().Extract(opentracing.Binary, bytes.NewBuffer(request.SpanCtx))
@@ -256,7 +256,7 @@ func (storage *Storage) HandleLabelValuesReq(request *backendpb.LabelValuesReque
 		span = opentracing.StartSpan("storage_labelValues", opentracing.ChildOf(wireContext))
 	}
 	defer func() {
-		if queryResponse.Status == pb.StatusCode_Succeed {
+		if queryResponse.Status == msg.StatusCode_Succeed {
 			span.SetTag("valuesNum", len(queryResponse.Values))
 		} else {
 			span.SetTag("errorMsg", queryResponse.ErrorMsg)
@@ -285,7 +285,7 @@ func (storage *Storage) HandleLabelValuesReq(request *backendpb.LabelValuesReque
 		return queryResponse
 	}
 
-	queryResponse.Status = pb.StatusCode_Succeed
+	queryResponse.Status = msg.StatusCode_Succeed
 	queryResponse.Values = values
 	return queryResponse
 }
@@ -384,7 +384,7 @@ type AddReqHandler struct {
 	symbolsV *syn.Map
 }
 
-func (addReqHandler *AddReqHandler) HandleAddReq(request *backendpb.AddRequest) error {
+func (addReqHandler *AddReqHandler) HandleAddReq(request *backendmsg.AddRequest) error {
 	var multiErr error
 	var app = addReqHandler.appender()
 

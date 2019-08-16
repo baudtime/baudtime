@@ -19,13 +19,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/baudtime/baudtime/msg"
 	"sync"
 
 	"github.com/baudtime/baudtime/backend/storage"
 	"github.com/baudtime/baudtime/meta"
-	"github.com/baudtime/baudtime/msg/pb"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/tcp"
 	"github.com/baudtime/baudtime/tcp/client"
 	"github.com/baudtime/baudtime/vars"
@@ -35,9 +34,9 @@ import (
 )
 
 type Client interface {
-	Select(ctx context.Context, req *backendpb.SelectRequest) (*backendpb.SelectResponse, error)
-	LabelValues(ctx context.Context, req *backendpb.LabelValuesRequest) (*pb.LabelValuesResponse, error)
-	Add(ctx context.Context, req *backendpb.AddRequest) error
+	Select(ctx context.Context, req *backendmsg.SelectRequest) (*backendmsg.SelectResponse, error)
+	LabelValues(ctx context.Context, req *backendmsg.LabelValuesRequest) (*msg.LabelValuesResponse, error)
+	Add(ctx context.Context, req *backendmsg.AddRequest) error
 	Close() error
 	Name() string
 }
@@ -109,7 +108,7 @@ func (c *ShardClient) exeQuery(query func(node *meta.Node) (resp msg.Message, er
 	}
 }
 
-func (c *ShardClient) Select(ctx context.Context, req *backendpb.SelectRequest) (*backendpb.SelectResponse, error) {
+func (c *ShardClient) Select(ctx context.Context, req *backendmsg.SelectRequest) (*backendmsg.SelectResponse, error) {
 	if req == nil {
 		return nil, nil
 	}
@@ -129,7 +128,7 @@ func (c *ShardClient) Select(ctx context.Context, req *backendpb.SelectRequest) 
 
 	resp, err := c.exeQuery(func(node *meta.Node) (msg.Message, error) {
 		if c.localStorage != nil && node.IP == vars.LocalIP && node.Port == vars.Cfg.TcpPort {
-			if resp := c.localStorage.HandleSelectReq(req); resp.Status != pb.StatusCode_Succeed {
+			if resp := c.localStorage.HandleSelectReq(req); resp.Status != msg.StatusCode_Succeed {
 				return nil, errors.Errorf("select error on %s, err:%s", node.Addr(), resp.ErrorMsg)
 			} else {
 				return resp, nil
@@ -145,7 +144,7 @@ func (c *ShardClient) Select(ctx context.Context, req *backendpb.SelectRequest) 
 				return nil, err
 			}
 
-			if _, ok := resp.(*backendpb.SelectResponse); !ok {
+			if _, ok := resp.(*backendmsg.SelectResponse); !ok {
 				return nil, tcp.BadMsgTypeError
 			}
 			return resp, nil
@@ -155,10 +154,10 @@ func (c *ShardClient) Select(ctx context.Context, req *backendpb.SelectRequest) 
 	if err != nil {
 		return nil, err
 	}
-	return resp.(*backendpb.SelectResponse), nil
+	return resp.(*backendmsg.SelectResponse), nil
 }
 
-func (c *ShardClient) LabelValues(ctx context.Context, req *backendpb.LabelValuesRequest) (*pb.LabelValuesResponse, error) {
+func (c *ShardClient) LabelValues(ctx context.Context, req *backendmsg.LabelValuesRequest) (*msg.LabelValuesResponse, error) {
 	if req == nil {
 		return nil, nil
 	}
@@ -176,7 +175,7 @@ func (c *ShardClient) LabelValues(ctx context.Context, req *backendpb.LabelValue
 
 	resp, err := c.exeQuery(func(node *meta.Node) (msg.Message, error) {
 		if c.localStorage != nil && node.IP == vars.LocalIP && node.Port == vars.Cfg.TcpPort {
-			if resp := c.localStorage.HandleLabelValuesReq(req); resp.Status != pb.StatusCode_Succeed {
+			if resp := c.localStorage.HandleLabelValuesReq(req); resp.Status != msg.StatusCode_Succeed {
 				return nil, errors.Errorf("select error on %s, err:%s", node.Addr(), resp.ErrorMsg)
 			} else {
 				return resp, nil
@@ -192,7 +191,7 @@ func (c *ShardClient) LabelValues(ctx context.Context, req *backendpb.LabelValue
 				return nil, err
 			}
 
-			if _, ok := resp.(*pb.LabelValuesResponse); !ok {
+			if _, ok := resp.(*msg.LabelValuesResponse); !ok {
 				return nil, tcp.BadMsgTypeError
 			}
 			return resp, nil
@@ -201,10 +200,10 @@ func (c *ShardClient) LabelValues(ctx context.Context, req *backendpb.LabelValue
 	if err != nil {
 		return nil, err
 	}
-	return resp.(*pb.LabelValuesResponse), nil
+	return resp.(*msg.LabelValuesResponse), nil
 }
 
-func (c *ShardClient) Add(ctx context.Context, req *backendpb.AddRequest) (err error) {
+func (c *ShardClient) Add(ctx context.Context, req *backendmsg.AddRequest) (err error) {
 	if req == nil {
 		return
 	}

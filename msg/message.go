@@ -1,16 +1,15 @@
 package msg
 
 type Marshaler interface {
-	//Marshal([]byte) ([]byte, error)
-	MarshalTo(b []byte) (int, error)
-	Size() int
+	MarshalMsg([]byte) ([]byte, error)
 }
 
 type Unmarshaler interface {
-	Unmarshal([]byte) error
+	UnmarshalMsg([]byte) ([]byte, error)
 }
 
 type Message interface {
 	Marshaler
 	Unmarshaler
+	Msgsize() int
 }

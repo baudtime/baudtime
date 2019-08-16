@@ -22,7 +22,7 @@ import (
 
 	"github.com/baudtime/baudtime/backend/storage"
 	"github.com/baudtime/baudtime/meta"
-	"github.com/baudtime/baudtime/msg/pb"
+	"github.com/baudtime/baudtime/msg"
 	"github.com/baudtime/baudtime/util/time"
 	"github.com/hashicorp/go-multierror"
 	"github.com/prometheus/common/model"
@@ -487,7 +487,7 @@ type fanoutAppender struct {
 	localStorage *storage.Storage
 }
 
-func (fanoutApp *fanoutAppender) Add(l []pb.Label, t int64, v float64, hash uint64) error {
+func (fanoutApp *fanoutAppender) Add(l []msg.Label, t int64, v float64, hash uint64) error {
 	shardID, err := meta.Router().GetShardIDByLabels(time.Time(t), l, hash)
 	if err != nil {
 		return err

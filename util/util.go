@@ -16,7 +16,7 @@
 package util
 
 import (
-	"github.com/baudtime/baudtime/msg/pb"
+	"github.com/baudtime/baudtime/msg"
 	"github.com/cespare/xxhash"
 	"net"
 	"unsafe"
@@ -62,7 +62,7 @@ func NewHasher() *hasher {
 	return &hasher{buf: make([]byte, 0, 1024)}
 }
 
-func (h *hasher) Hash(ls []pb.Label) uint64 {
+func (h *hasher) Hash(ls []msg.Label) uint64 {
 	for _, v := range ls {
 		h.buf = append(h.buf, v.Name...)
 		h.buf = append(h.buf, sep)

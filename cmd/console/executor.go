@@ -21,8 +21,7 @@ import (
 	"fmt"
 	"github.com/baudtime/baudtime"
 	"github.com/baudtime/baudtime/msg"
-	"github.com/baudtime/baudtime/msg/pb"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/promql"
 	"github.com/baudtime/baudtime/util"
 	ts "github.com/baudtime/baudtime/util/time"
@@ -58,38 +57,26 @@ func (e *executor) execCommand(cmd string, args ...string) error {
 			return nil
 		}
 
-		command := &pb.AdminCmdRequest{
-			Command: &pb.AdminCmdRequest_JoinCluster{
-				JoinCluster: &pb.JoinCluster{},
-			},
-		}
-
-		return e.execComand(command)
+		return e.execComand(&backendmsg.AdminCmdJoinCluster{})
 	case "info":
 		if len(args) != 0 {
 			printCommandHelp(cmd)
 			return nil
 		}
 
-		command := &pb.AdminCmdRequest{
-			Command: &pb.AdminCmdRequest_Info{
-				Info: &pb.Info{},
-			},
-		}
-
-		return e.execComand(command)
+		return e.execComand(&backendmsg.AdminCmdInfo{})
 	case "slaveof":
 		if len(args) != 2 {
 			printCommandHelp(cmd)
 			return nil
 		}
 
-		var command *backendpb.SlaveOfCommand
+		var command *backendmsg.SlaveOfCommand
 
 		if args[0] == "no" && args[1] == "one" {
-			command = &backendpb.SlaveOfCommand{}
+			command = &backendmsg.SlaveOfCommand{}
 		} else {
-			command = &backendpb.SlaveOfCommand{
+			command = &backendmsg.SlaveOfCommand{
 				MasterAddr: fmt.Sprintf("%s:%s", args[0], args[1]),
 			}
 		}
@@ -143,7 +130,7 @@ func (e *executor) execCommand(cmd string, args ...string) error {
 			return nil
 		}
 
-		var labels []pb.Label
+		var labels []msg.Label
 
 		labelStr := strings.Replace(args[0], " ", "", -1)
 		labelStr = strings.Replace(labelStr, "\"", "", -1)
@@ -153,7 +140,7 @@ func (e *executor) execCommand(cmd string, args ...string) error {
 		idx2 := strings.Index(labelStr, "}")
 
 		metricName := string(labelBytes[:idx1])
-		labels = append(labels, pb.Label{
+		labels = append(labels, msg.Label{
 			Name:  "__name__",
 			Value: metricName,
 		})
@@ -163,7 +150,7 @@ func (e *executor) execCommand(cmd string, args ...string) error {
 			pairs := strings.Split(labelStr, ",")
 			for _, p := range pairs {
 				array := strings.Split(p, "=")
-				labels = append(labels, pb.Label{
+				labels = append(labels, msg.Label{
 					Name:  strings.Trim(array[0], " "),
 					Value: strings.Trim(array[1], " "),
 				})
@@ -188,13 +175,13 @@ func (e *executor) execCommand(cmd string, args ...string) error {
 			return err
 		}
 
-		series := &pb.Series{
+		series := &msg.Series{
 			Labels: labels,
-			Points: []pb.Point{{T: t, V: v}},
+			Points: []msg.Point{{T: t, V: v}},
 		}
 
-		addRequest := &backendpb.AddRequest{
-			Series: []*pb.Series{series},
+		addRequest := &backendmsg.AddRequest{
+			Series: []*msg.Series{series},
 		}
 
 		err = e.codedConn.WriteRaw(addRequest)
@@ -208,7 +195,7 @@ func (e *executor) execCommand(cmd string, args ...string) error {
 			return nil
 		}
 
-		command := &backendpb.LabelValuesRequest{
+		command := &backendmsg.LabelValuesRequest{
 			Name: args[0],
 		}
 		if len(args) > 1 {
@@ -248,14 +235,14 @@ func (e *executor) execComand(cmd msg.Message) error {
 		}
 
 		switch r := reply.(type) {
-		case *pb.GeneralResponse:
-			if r.Status == pb.StatusCode_Succeed {
+		case *msg.GeneralResponse:
+			if r.Status == msg.StatusCode_Succeed {
 				fmt.Println(r.Message)
 			} else {
 				fmt.Println("Err")
 			}
-		case *pb.LabelValuesResponse:
-			if r.Status == pb.StatusCode_Succeed {
+		case *msg.LabelValuesResponse:
+			if r.Status == msg.StatusCode_Succeed {
 				fmt.Println(r.Values)
 			} else {
 				fmt.Println(r.ErrorMsg)

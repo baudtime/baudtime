@@ -23,7 +23,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/baudtime/baudtime/msg/pb"
+	"github.com/baudtime/baudtime/msg"
 	"github.com/baudtime/baudtime/util/syn"
 	. "github.com/baudtime/baudtime/vars"
 	"github.com/go-kit/kit/log/level"
@@ -99,18 +99,20 @@ func (loop *ReadWriteLoop) LoopRead() {
 			return
 		}
 
-		if connCtrl, ok := in.Message.(*pb.ConnCtrl); ok {
+		if connCtrl, ok := in.Message.(*msg.ConnCtrl); ok {
 			switch connCtrl.Code {
-			case pb.CtrlCode_CloseRead:
+			case msg.CtrlCode_CloseRead:
 				err = loop.CloseRead()
-			case pb.CtrlCode_CloseWrite:
+			case msg.CtrlCode_CloseWrite:
 				err = loop.CloseWrite()
 			}
-			level.Info(Logger).Log("msg", connCtrl.Code.String(), "err", err)
+			level.Info(Logger).Log("connCtrl", connCtrl.Code, "err", err)
 			continue
 		}
 
 		out := loop.handle(ctx, in, bytes[:n])
+		Put(in.GetRaw())
+
 		if loop.WriteClosed() || out == EmptyMsg {
 			continue
 		}

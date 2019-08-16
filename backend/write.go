@@ -18,8 +18,8 @@ package backend
 import (
 	"context"
 	"github.com/baudtime/baudtime/backend/storage"
-	"github.com/baudtime/baudtime/msg/pb"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/pkg/errors"
 	"sync"
 )
@@ -27,21 +27,21 @@ import (
 var (
 	seriesPool = sync.Pool{
 		New: func() interface{} {
-			return &pb.Series{
-				Points: make([]pb.Point, 0, 60),
+			return &msg.Series{
+				Points: make([]msg.Point, 0, 60),
 			}
 		},
 	}
 	seriesSlicePool = &sync.Pool{
 		New: func() interface{} {
-			return make([]*pb.Series, 0)
+			return make([]*msg.Series, 0)
 		},
 	}
 )
 
-type seriesHashMap map[uint64][]*pb.Series
+type seriesHashMap map[uint64][]*msg.Series
 
-func (m seriesHashMap) get(hash uint64, lset []pb.Label) *pb.Series {
+func (m seriesHashMap) get(hash uint64, lset []msg.Label) *msg.Series {
 OUTLOOP:
 	for _, s := range m[hash] {
 		if len(s.Labels) != len(lset) {
@@ -59,10 +59,10 @@ OUTLOOP:
 	return nil
 }
 
-func (m seriesHashMap) set(hash uint64, s *pb.Series) {
+func (m seriesHashMap) set(hash uint64, s *msg.Series) {
 	ss, found := m[hash]
 	if !found {
-		ss = seriesSlicePool.Get().([]*pb.Series)
+		ss = seriesSlicePool.Get().([]*msg.Series)
 	}
 	m[hash] = append(ss, s)
 }
@@ -77,7 +77,7 @@ func (m seriesHashMap) del(hash uint64) {
 type appender struct {
 	client  Client
 	series  seriesHashMap
-	toFlush backendpb.AddRequest
+	toFlush backendmsg.AddRequest
 }
 
 func newAppender(shardID string, localStorage *storage.Storage) (*appender, error) {
@@ -94,14 +94,14 @@ func newAppender(shardID string, localStorage *storage.Storage) (*appender, erro
 	}, nil
 }
 
-func (app *appender) Add(l []pb.Label, t int64, v float64, hash uint64) error {
+func (app *appender) Add(l []msg.Label, t int64, v float64, hash uint64) error {
 	s := app.series.get(hash, l)
 	if s == nil {
-		s = seriesPool.Get().(*pb.Series)
+		s = seriesPool.Get().(*msg.Series)
 		s.Labels = l
 		app.series.set(hash, s)
 	}
-	s.Points = append(s.Points, pb.Point{T: t, V: v})
+	s.Points = append(s.Points, msg.Point{T: t, V: v})
 	return nil
 }
 

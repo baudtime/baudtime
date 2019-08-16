@@ -18,8 +18,6 @@ package meta
 import (
 	"context"
 	"encoding/json"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
-	"github.com/baudtime/baudtime/tcp"
 	"os"
 	"strconv"
 	"strings"
@@ -28,7 +26,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/baudtime/baudtime/msg/pb"
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
+	"github.com/baudtime/baudtime/tcp"
 	"github.com/baudtime/baudtime/vars"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/coreos/etcd/clientv3/concurrency"
@@ -333,7 +333,7 @@ func FailoverIfNeeded(node *Node) {
 	buf := make([]byte, tcp.MaxMsgSize)
 	var msgCodec tcp.MsgCodec
 
-	n, err := msgCodec.Encode(tcp.Message{Message: &backendpb.SlaveOfCommand{}}, buf) //slaveof no one
+	n, err := msgCodec.Encode(tcp.Message{Message: &backendmsg.SlaveOfCommand{}}, buf) //slaveof no one
 	if err != nil {
 		level.Error(vars.Logger).Log("err", err)
 		return
@@ -389,12 +389,12 @@ func FailoverIfNeeded(node *Node) {
 
 			reply, er := msgCodec.Decode(buf[:nn])
 			if raw := reply.GetRaw(); er == nil && raw != nil {
-				reply, ok := raw.(*pb.GeneralResponse)
+				reply, ok := raw.(*msg.GeneralResponse)
 				if !ok {
 					return
 				}
 
-				if reply.Status != pb.StatusCode_Succeed {
+				if reply.Status != msg.StatusCode_Succeed {
 					err = errors.New(reply.Message)
 				} else {
 					level.Warn(vars.Logger).Log("msg", "failover succeed", "shard", node.ShardID, "chosen", chosen.Addr())

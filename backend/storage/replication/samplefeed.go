@@ -17,18 +17,19 @@ package replication
 
 import (
 	"encoding/binary"
-	"github.com/baudtime/baudtime/msg/pb"
-	"github.com/baudtime/baudtime/tcp"
-	ts "github.com/baudtime/baudtime/util/time"
-	"github.com/baudtime/baudtime/vars"
-	"github.com/go-kit/kit/log/level"
-	"github.com/pkg/errors"
 	"io"
 	"net"
 	"os"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/baudtime/baudtime/msg"
+	"github.com/baudtime/baudtime/tcp"
+	ts "github.com/baudtime/baudtime/util/time"
+	"github.com/baudtime/baudtime/vars"
+	"github.com/go-kit/kit/log/level"
+	"github.com/pkg/errors"
 )
 
 type sampleFeed struct {
@@ -234,8 +235,8 @@ func (h *handOff) reconnect() error {
 
 	var msgCodec tcp.MsgCodec
 
-	closeWrite := &pb.ConnCtrl{pb.CtrlCode_CloseWrite}
-	buf := make([]byte, 1+binary.MaxVarintLen64+closeWrite.Size())
+	closeWrite := &msg.ConnCtrl{msg.CtrlCode_CloseWrite}
+	buf := make([]byte, 1+binary.MaxVarintLen64+closeWrite.Msgsize())
 
 	n, err := msgCodec.Encode(tcp.Message{Message: closeWrite}, buf)
 	if err != nil {

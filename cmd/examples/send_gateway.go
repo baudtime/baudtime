@@ -16,13 +16,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/baudtime/baudtime/msg"
-	"github.com/baudtime/baudtime/msg/pb"
-	"github.com/baudtime/baudtime/msg/pb/gateway"
+	"github.com/baudtime/baudtime/msg/gateway"
 	"github.com/baudtime/baudtime/tcp/client"
 	ts "github.com/baudtime/baudtime/util/time"
-	"github.com/baudtime/baudtime/vars"
 	"sync"
 	"time"
 )
@@ -33,12 +32,12 @@ func send_gateway() {
 
 	var t int64
 
-	s := make([]*pb.Series, 100)
+	s := make([]*msg.Series, 10)
 	r := &gateway.AddRequest{s}
 
 	for j := 0; j < 10000; j++ {
-		for i := 0; i < 100; i++ {
-			lbs := []pb.Label{
+		for i := 0; i < 10; i++ {
+			lbs := []msg.Label{
 				{"__name__", "test"},
 				{"host", "localhost"},
 				{"app", "gateway"},
@@ -51,33 +50,27 @@ func send_gateway() {
 			}
 
 			t = ts.FromTime(time.Now())
-			points := []pb.Point{{t, float64(i + j*100)}}
+			points := []msg.Point{{t, float64(i)}}
 
-			r.Series[i] = &pb.Series{
+			r.Series[i] = &msg.Series{
 				Labels: lbs,
 				Points: points,
 			}
 		}
 
-		err := cli.AsyncRequest(r,
-			func(opaque uint64, response msg.Message) {
-				fmt.Println("++++++++++++++++++", opaque)
-			})
+		_, err := cli.SyncRequest(context.Background(), r)
+		time.Sleep(2 * time.Second)
 		if err != nil {
 			fmt.Println(err)
 		}
-		if j%100 == 0 {
-			fmt.Printf("handled：%d\n", j)
-		}
+
 	}
 }
 
 func main() {
-	vars.Init("proxy_client")
-
 	var wg sync.WaitGroup
 
-	count := 2
+	count := 1
 
 	for i := 0; i < count; i++ {
 		wg.Add(1)

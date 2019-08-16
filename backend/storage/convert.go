@@ -1,13 +1,13 @@
 package storage
 
 import (
-	"github.com/baudtime/baudtime/msg/pb"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/prometheus/tsdb/labels"
 	"strings"
 )
 
-func ProtoToMatchers(matchers []*backendpb.Matcher) ([]labels.Matcher, error) {
+func ProtoToMatchers(matchers []*backendmsg.Matcher) ([]labels.Matcher, error) {
 	result := make([]labels.Matcher, 0, len(matchers))
 	for _, m := range matchers {
 		result = append(result, ProtoToMatcher(m))
@@ -15,22 +15,22 @@ func ProtoToMatchers(matchers []*backendpb.Matcher) ([]labels.Matcher, error) {
 	return result, nil
 }
 
-func ProtoToMatcher(m *backendpb.Matcher) labels.Matcher {
+func ProtoToMatcher(m *backendmsg.Matcher) labels.Matcher {
 	switch m.Type {
-	case backendpb.MatchType_MatchEqual:
+	case backendmsg.MatchType_MatchEqual:
 		return labels.NewEqualMatcher(m.Name, m.Value)
 
-	case backendpb.MatchType_MatchNotEqual:
+	case backendmsg.MatchType_MatchNotEqual:
 		return labels.Not(labels.NewEqualMatcher(m.Name, m.Value))
 
-	case backendpb.MatchType_MatchRegexp:
+	case backendmsg.MatchType_MatchRegexp:
 		res, err := labels.NewRegexpMatcher(m.Name, "^(?:"+m.Value+")$")
 		if err != nil {
 			panic(err)
 		}
 		return res
 
-	case backendpb.MatchType_MatchNotRegexp:
+	case backendmsg.MatchType_MatchNotRegexp:
 		res, err := labels.NewRegexpMatcher(m.Name, "^(?:"+m.Value+")$")
 		if err != nil {
 			panic(err)
@@ -40,16 +40,16 @@ func ProtoToMatcher(m *backendpb.Matcher) labels.Matcher {
 	panic("storage.convertMatcher: invalid matcher type")
 }
 
-func LabelsToProto(lbs labels.Labels) []pb.Label {
-	proto := make([]pb.Label, 0, len(lbs))
+func LabelsToProto(lbs labels.Labels) []msg.Label {
+	proto := make([]msg.Label, 0, len(lbs))
 	for _, l := range lbs {
-		proto = append(proto, pb.Label{Name: l.Name, Value: l.Value})
+		proto = append(proto, msg.Label{Name: l.Name, Value: l.Value})
 
 	}
 	return proto
 }
 
-func toString(lbs []pb.Label) string {
+func toString(lbs []msg.Label) string {
 	var b strings.Builder
 
 	b.WriteByte('{')

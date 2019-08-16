@@ -17,9 +17,9 @@ package tcp
 
 import (
 	"github.com/baudtime/baudtime/msg"
-	"github.com/baudtime/baudtime/msg/pb"
-	"github.com/baudtime/baudtime/msg/pb/backend"
-	"github.com/baudtime/baudtime/msg/pb/gateway"
+	"github.com/baudtime/baudtime/msg/backend"
+	"github.com/baudtime/baudtime/msg/gateway"
+	"sync"
 )
 
 const (
@@ -39,15 +39,21 @@ const (
 	BackendSyncHandshakeAckType
 	BackendSyncHeartbeatType
 	BackendSyncHeartbeatAckType
+	BackendAdminCmdInfoType
+	BackendAdminCmdJoinClusterType
 	//other
-	AdminCmdRequestType
 	ConnCtrlType
 	GeneralResponseType
 	LabelValuesResponseType
 )
 
-func Type(msg msg.Message) MsgType {
-	switch msg.(type) {
+var (
+	gatewayAddRequestPool = sync.Pool{New: func() interface{} { return new(gateway.AddRequest) }}
+	backendAddRequestPool = sync.Pool{New: func() interface{} { return new(backend.AddRequest) }}
+)
+
+func Type(m msg.Message) MsgType {
+	switch m.(type) {
 	//gateway
 	case *gateway.AddRequest:
 		return GatewayAddRequestType
@@ -78,25 +84,27 @@ func Type(msg msg.Message) MsgType {
 		return BackendSyncHeartbeatType
 	case *backend.SyncHeartbeatAck:
 		return BackendSyncHeartbeatAckType
+	case *backend.AdminCmdInfo:
+		return BackendAdminCmdInfoType
+	case *backend.AdminCmdJoinCluster:
+		return BackendAdminCmdJoinClusterType
 	//other
-	case *pb.AdminCmdRequest:
-		return AdminCmdRequestType
-	case *pb.ConnCtrl:
+	case *msg.ConnCtrl:
 		return ConnCtrlType
-	case *pb.GeneralResponse:
+	case *msg.GeneralResponse:
 		return GeneralResponseType
-	case *pb.LabelValuesResponse:
+	case *msg.LabelValuesResponse:
 		return LabelValuesResponseType
 	}
 
 	return BadMsgType
 }
 
-func Make(msgType MsgType) msg.Message {
-	switch msgType {
+func Get(t MsgType) msg.Message {
+	switch t {
 	//gateway
 	case GatewayAddRequestType:
-		return new(gateway.AddRequest)
+		return gatewayAddRequestPool.Get().(*gateway.AddRequest)
 	case GatewayInstantQueryRequestType:
 		return new(gateway.InstantQueryRequest)
 	case GatewayRangeQueryRequestType:
@@ -107,7 +115,7 @@ func Make(msgType MsgType) msg.Message {
 		return new(gateway.LabelValuesRequest)
 	//backend
 	case BackendAddRequestType:
-		return new(backend.AddRequest)
+		return backendAddRequestPool.Get().(*backend.AddRequest)
 	case BackendSelectRequestType:
 		return new(backend.SelectRequest)
 	case BackendSelectResponseType:
@@ -124,16 +132,27 @@ func Make(msgType MsgType) msg.Message {
 		return new(backend.SyncHeartbeat)
 	case BackendSyncHeartbeatAckType:
 		return new(backend.SyncHeartbeatAck)
+	case BackendAdminCmdInfoType:
+		return new(backend.AdminCmdInfo)
+	case BackendAdminCmdJoinClusterType:
+		return new(backend.AdminCmdJoinCluster)
 	//other
-	case AdminCmdRequestType:
-		return new(pb.AdminCmdRequest)
 	case ConnCtrlType:
-		return new(pb.ConnCtrl)
+		return new(msg.ConnCtrl)
 	case GeneralResponseType:
-		return new(pb.GeneralResponse)
+		return new(msg.GeneralResponse)
 	case LabelValuesResponseType:
-		return new(pb.LabelValuesResponse)
+		return new(msg.LabelValuesResponse)
 	}
 
 	return nil
+}
+
+func Put(m msg.Message) {
+	switch req := m.(type) {
+	case *gateway.AddRequest:
+		gatewayAddRequestPool.Put(req)
+	case *backend.AddRequest:
+		backendAddRequestPool.Put(req)
+	}
 }

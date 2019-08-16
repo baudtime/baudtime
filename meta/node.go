@@ -44,21 +44,23 @@ type Node struct {
 	IDC        string
 	MasterIP   string
 	MasterPort string
+	addr       string    `json:"-"`
+	once       sync.Once `json:"-"`
 }
 
 var EmptyNode = Node{}
 
 func (node Node) Addr() string {
-	if node.IP == "" || node.Port == "" {
-		return ""
-	}
-
-	var b strings.Builder
-	b.WriteString(node.IP)
-	b.WriteByte(':')
-	b.WriteString(node.Port)
-
-	return b.String()
+	node.once.Do(func() {
+		if node.IP != "" && node.Port != "" {
+			var b strings.Builder
+			b.WriteString(node.IP)
+			b.WriteByte(':')
+			b.WriteString(node.Port)
+			node.addr = b.String()
+		}
+	})
+	return node.addr
 }
 
 func (node Node) String() string {

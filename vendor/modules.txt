@@ -66,6 +66,8 @@ github.com/opentracing/opentracing-go/log
 github.com/opentracing/opentracing-go/ext
 # github.com/peterh/liner v1.1.0
 github.com/peterh/liner
+# github.com/philhofer/fwd v1.0.0
+github.com/philhofer/fwd
 # github.com/pkg/errors v0.8.1
 github.com/pkg/errors
 # github.com/pmezard/go-difflib v1.0.0
@@ -111,6 +113,8 @@ github.com/shirou/gopsutil/internal/common
 # github.com/stretchr/testify v1.3.0
 github.com/stretchr/testify/require
 github.com/stretchr/testify/assert
+# github.com/tinylib/msgp v1.1.0
+github.com/tinylib/msgp/msgp
 # github.com/uber/jaeger-client-go v2.16.0+incompatible
 github.com/uber/jaeger-client-go/config
 github.com/uber/jaeger-client-go

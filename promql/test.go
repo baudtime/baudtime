@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/baudtime/baudtime/backend"
-	"github.com/baudtime/baudtime/msg/pb"
+	"github.com/baudtime/baudtime/msg"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/util/testutil"
@@ -289,9 +289,9 @@ func (cmd *loadCmd) append(a backend.Appender) error {
 	for h, smpls := range cmd.defs {
 		m := cmd.metrics[h]
 
-		lset := make([]pb.Label, 0, len(m))
+		lset := make([]msg.Label, 0, len(m))
 		for _, l := range m {
-			lset = append(lset, pb.Label{
+			lset = append(lset, msg.Label{
 				Name:  l.Name,
 				Value: l.Value,
 			})
@@ -434,7 +434,6 @@ func (t *Test) exec(tc testCommand) error {
 		if err := cmd.append(app); err != nil {
 			return err
 		}
-
 
 	case *evalCmd:
 		q, _ := t.queryEngine.NewInstantQuery(t.dataNodeAPI, cmd.expr, cmd.start)

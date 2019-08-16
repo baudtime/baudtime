@@ -16,43 +16,43 @@
 package util
 
 import (
-	"github.com/baudtime/baudtime/msg/pb"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
-func MatchersToProto(ms []*labels.Matcher) []*backendpb.Matcher {
-	protoMatchers := make([]*backendpb.Matcher, 0, len(ms))
+func MatchersToProto(ms []*labels.Matcher) []*backendmsg.Matcher {
+	protoMatchers := make([]*backendmsg.Matcher, 0, len(ms))
 	for _, m := range ms {
 		protoMatchers = append(protoMatchers, MatcherToProto(m))
 	}
 	return protoMatchers
 }
 
-func MatcherToProto(m *labels.Matcher) *backendpb.Matcher {
+func MatcherToProto(m *labels.Matcher) *backendmsg.Matcher {
 	switch m.Type {
 	case labels.MatchEqual:
-		return &backendpb.Matcher{Type: 0, Name: m.Name, Value: m.Value}
+		return &backendmsg.Matcher{Type: 0, Name: m.Name, Value: m.Value}
 	case labels.MatchNotEqual:
-		return &backendpb.Matcher{Type: 1, Name: m.Name, Value: m.Value}
+		return &backendmsg.Matcher{Type: 1, Name: m.Name, Value: m.Value}
 	case labels.MatchRegexp:
-		return &backendpb.Matcher{Type: 2, Name: m.Name, Value: m.Value}
+		return &backendmsg.Matcher{Type: 2, Name: m.Name, Value: m.Value}
 	case labels.MatchNotRegexp:
-		return &backendpb.Matcher{Type: 3, Name: m.Name, Value: m.Value}
+		return &backendmsg.Matcher{Type: 3, Name: m.Name, Value: m.Value}
 	}
 	return nil
 }
 
-func LabelsToProto(lbs labels.Labels) []pb.Label {
-	proto := make([]pb.Label, 0, len(lbs))
+func LabelsToProto(lbs labels.Labels) []msg.Label {
+	proto := make([]msg.Label, 0, len(lbs))
 	for _, l := range lbs {
-		proto = append(proto, pb.Label{Name: l.Name, Value: l.Value})
+		proto = append(proto, msg.Label{Name: l.Name, Value: l.Value})
 
 	}
 	return proto
 }
 
-func ProtoToLabels(labelPairs []pb.Label) labels.Labels {
+func ProtoToLabels(labelPairs []msg.Label) labels.Labels {
 	result := make(labels.Labels, 0, len(labelPairs))
 	for _, l := range labelPairs {
 		result = append(result, labels.Label{
@@ -62,4 +62,3 @@ func ProtoToLabels(labelPairs []pb.Label) labels.Labels {
 	}
 	return result
 }
-

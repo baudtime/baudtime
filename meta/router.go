@@ -16,15 +16,14 @@
 package meta
 
 import (
-	"sync"
-	"time"
-
-	"github.com/baudtime/baudtime/msg/pb"
+	"github.com/baudtime/baudtime/msg"
 	tm "github.com/baudtime/baudtime/util/time"
 	"github.com/cespare/xxhash"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"sync"
+	"time"
 )
 
 var (
@@ -48,7 +47,7 @@ func Router() *router {
 }
 
 //used by write
-func (r *router) GetShardIDByLabels(t time.Time, lbls []pb.Label, hash uint64) (string, error) {
+func (r *router) GetShardIDByLabels(t time.Time, lbls []msg.Label, hash uint64) (string, error) {
 	var (
 		err        error
 		metricName string

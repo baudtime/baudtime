@@ -18,14 +18,6 @@ package replication
 import (
 	"context"
 	"fmt"
-	"github.com/baudtime/baudtime/msg/pb"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
-	"github.com/baudtime/baudtime/tcp/client"
-	"github.com/baudtime/baudtime/util/os/fileutil"
-	t "github.com/baudtime/baudtime/util/time"
-	. "github.com/baudtime/baudtime/vars"
-	"github.com/go-kit/kit/log/level"
-	"github.com/prometheus/tsdb"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -33,6 +25,15 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
+	"github.com/baudtime/baudtime/tcp/client"
+	"github.com/baudtime/baudtime/util/os/fileutil"
+	t "github.com/baudtime/baudtime/util/time"
+	. "github.com/baudtime/baudtime/vars"
+	"github.com/go-kit/kit/log/level"
+	"github.com/prometheus/tsdb"
 )
 
 const (
@@ -55,7 +56,7 @@ func (h *Heartbeat) start() {
 		h.masterCli = client.NewBackendClient("rpl_s2m", h.masterAddr, 2)
 	}
 
-	heartbeat := &backendpb.SyncHeartbeat{
+	heartbeat := &backendmsg.SyncHeartbeat{
 		MasterAddr:    h.masterAddr,
 		SlaveAddr:     fmt.Sprintf("%v:%v", LocalIP, Cfg.TcpPort),
 		RelationID:    h.relationID,
@@ -76,7 +77,7 @@ func (h *Heartbeat) start() {
 			sleepTime = time.Second
 		}
 
-		ack, ok := reply.(*backendpb.SyncHeartbeatAck)
+		ack, ok := reply.(*backendmsg.SyncHeartbeatAck)
 		if !ok {
 			level.Error(Logger).Log("error", "unexpected response")
 			continue
@@ -84,7 +85,7 @@ func (h *Heartbeat) start() {
 
 		h.lastTSendHeartbeat.Store(time.Now())
 
-		if ack.Status != pb.StatusCode_Succeed {
+		if ack.Status != msg.StatusCode_Succeed {
 			level.Error(Logger).Log("error", ack.Message)
 			continue
 		}
@@ -158,9 +159,9 @@ func (h *Heartbeat) isRunning() bool {
 	return atomic.LoadUint32(&h.closed) == 0
 }
 
-func getStartSyncOffset(blocks []*tsdb.Block) *backendpb.BlockSyncOffset {
+func getStartSyncOffset(blocks []*tsdb.Block) *backendmsg.BlockSyncOffset {
 	if len(blocks) == 0 {
-		return &backendpb.BlockSyncOffset{}
+		return &backendmsg.BlockSyncOffset{}
 	}
 
 	lastBlock := blocks[len(blocks)-1]
@@ -185,7 +186,7 @@ func getStartSyncOffset(blocks []*tsdb.Block) *backendpb.BlockSyncOffset {
 		panic("not clean, please delete " + lastBlock.Dir())
 	}
 
-	return &backendpb.BlockSyncOffset{
+	return &backendmsg.BlockSyncOffset{
 		Ulid:   lastBlock.String(),
 		MinT:   lastBlock.MinTime(),
 		MaxT:   lastBlock.MaxTime(),

@@ -17,12 +17,18 @@ package baudtime
 
 import (
 	"context"
+	"net"
+	"os"
+	"strings"
+	"syscall"
+	"time"
+
 	"github.com/baudtime/baudtime/backend"
 	"github.com/baudtime/baudtime/backend/storage"
 	"github.com/baudtime/baudtime/meta"
-	"github.com/baudtime/baudtime/msg/pb"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
-	gatewaypb "github.com/baudtime/baudtime/msg/pb/gateway"
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
+	gatewaymsg "github.com/baudtime/baudtime/msg/gateway"
 	"github.com/baudtime/baudtime/promql"
 	"github.com/baudtime/baudtime/rule"
 	"github.com/baudtime/baudtime/tcp"
@@ -33,11 +39,6 @@ import (
 	"github.com/prometheus/tsdb"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
-	"net"
-	"os"
-	"strings"
-	"syscall"
-	"time"
 )
 
 type tcpServerObserver struct {
@@ -86,58 +87,55 @@ func (obs *tcpServerObserver) OnAccept(tcpConn *net.TCPConn) *tcp.ReadWriteLoop 
 		response := tcp.Message{Opaque: req.GetOpaque()}
 
 		switch request := raw.(type) {
-		case *gatewaypb.AddRequest:
+		case *gatewaymsg.AddRequest:
 			err := obs.gateway.Ingest(request)
 			if err != nil {
-				response.SetRaw(&pb.GeneralResponse{
-					Status:  pb.StatusCode_Failed,
+				response.SetRaw(&msg.GeneralResponse{
+					Status:  msg.StatusCode_Failed,
 					Message: err.Error(),
 				})
 			} else {
-				response.SetRaw(&pb.GeneralResponse{
-					Status: pb.StatusCode_Succeed,
+				response.SetRaw(&msg.GeneralResponse{
+					Status: msg.StatusCode_Succeed,
 				})
 			}
-		case *gatewaypb.InstantQueryRequest:
+		case *gatewaymsg.InstantQueryRequest:
 			response.SetRaw(obs.gateway.InstantQuery(request))
-		case *gatewaypb.RangeQueryRequest:
+		case *gatewaymsg.RangeQueryRequest:
 			response.SetRaw(obs.gateway.RangeQuery(request))
-		case *gatewaypb.LabelValuesRequest:
+		case *gatewaymsg.LabelValuesRequest:
 			response.SetRaw(obs.gateway.LabelValues(request))
-		case *backendpb.AddRequest:
+		case *backendmsg.AddRequest:
 			err := obs.storage.HandleAddReq(request)
 			obs.storage.ReplicateManager.HandleWriteReq(reqBytes)
 			if err != nil {
-				response.SetRaw(&pb.GeneralResponse{
-					Status:  pb.StatusCode_Failed,
+				response.SetRaw(&msg.GeneralResponse{
+					Status:  msg.StatusCode_Failed,
 					Message: err.Error(),
 				})
 			} else {
 				return tcp.EmptyMsg
 			}
-		case *backendpb.SelectRequest:
+		case *backendmsg.SelectRequest:
 			response.SetRaw(obs.storage.HandleSelectReq(request))
-		case *backendpb.LabelValuesRequest:
+		case *backendmsg.LabelValuesRequest:
 			response.SetRaw(obs.storage.HandleLabelValuesReq(request))
-		case *backendpb.SlaveOfCommand:
+		case *backendmsg.SlaveOfCommand:
 			response.SetRaw(obs.storage.ReplicateManager.HandleSlaveOfCmd(request))
-		case *backendpb.SyncHandshake:
+		case *backendmsg.SyncHandshake:
 			response.SetRaw(obs.storage.ReplicateManager.HandleSyncHandshake(request))
-		case *backendpb.SyncHeartbeat:
+		case *backendmsg.SyncHeartbeat:
 			response.SetRaw(obs.storage.ReplicateManager.HandleHeartbeat(request))
-		case *pb.AdminCmdRequest:
-			if infoCmd := request.GetInfo(); infoCmd != nil {
-				info, _, err := obs.storage.Info()
-				if err != nil {
-					response.SetRaw(&pb.GeneralResponse{Status: pb.StatusCode_Failed, Message: err.Error()})
-				} else {
-					response.SetRaw(&pb.GeneralResponse{Status: pb.StatusCode_Succeed, Message: info.String()})
-				}
+		case *backendmsg.AdminCmdInfo:
+			info, _, err := obs.storage.Info()
+			if err != nil {
+				response.SetRaw(&msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: err.Error()})
+			} else {
+				response.SetRaw(&msg.GeneralResponse{Status: msg.StatusCode_Succeed, Message: info.String()})
 			}
-			if joinCluster := request.GetJoinCluster(); joinCluster != nil {
-				obs.storage.ReplicateManager.JoinCluster()
-				response.SetRaw(&pb.GeneralResponse{Status: pb.StatusCode_Succeed, Message: obs.storage.ReplicateManager.RelationID()})
-			}
+		case *backendmsg.AdminCmdJoinCluster:
+			obs.storage.ReplicateManager.JoinCluster()
+			response.SetRaw(&msg.GeneralResponse{Status: msg.StatusCode_Succeed, Message: obs.storage.ReplicateManager.RelationID()})
 		}
 
 		return response

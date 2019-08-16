@@ -18,7 +18,6 @@ package replication
 import (
 	"context"
 	"fmt"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
 	"io"
 	"math"
 	"os"
@@ -30,7 +29,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/baudtime/baudtime/msg/pb"
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/tcp/client"
 	ts "github.com/baudtime/baudtime/util/time"
 	. "github.com/baudtime/baudtime/vars"
@@ -89,7 +89,7 @@ func (mgr *ReplicateManager) HandleWriteReq(request []byte) {
 	putStrSlice(toDelete)
 }
 
-func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendpb.SyncHeartbeat) *backendpb.SyncHeartbeatAck {
+func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendmsg.SyncHeartbeat) *backendmsg.SyncHeartbeatAck {
 	//level.Info(Logger).Log("msg", "receive heartbeat from slave", "slaveAddr", heartbeat.SlaveAddr)
 	mgr.lastTRecvHeartbeat.Store(time.Now())
 
@@ -105,16 +105,16 @@ func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendpb.SyncHeartbeat)
 	}
 
 	if heartbeat.BlkSyncOffset == nil {
-		return &backendpb.SyncHeartbeatAck{
-			Status: pb.StatusCode_Succeed,
+		return &backendmsg.SyncHeartbeatAck{
+			Status: msg.StatusCode_Succeed,
 		}
 	}
 
 	block := getBlock(mgr.db.Blocks(), feed.createdTime, heartbeat.BlkSyncOffset.MinT)
 	if block == nil {
 		mgr.db.EnableCompactions()
-		return &backendpb.SyncHeartbeatAck{
-			Status: pb.StatusCode_Succeed,
+		return &backendmsg.SyncHeartbeatAck{
+			Status: msg.StatusCode_Succeed,
 		}
 	}
 
@@ -134,8 +134,8 @@ func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendpb.SyncHeartbeat)
 
 	f, err := os.Open(filepath.Join(mgr.db.Dir(), ulid, path))
 	if err != nil {
-		return &backendpb.SyncHeartbeatAck{
-			Status:  pb.StatusCode_Failed,
+		return &backendmsg.SyncHeartbeatAck{
+			Status:  msg.StatusCode_Failed,
 			Message: err.Error(),
 		}
 	}
@@ -147,9 +147,9 @@ func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendpb.SyncHeartbeat)
 
 	m, err := f.Read(bytes)
 	if err == nil {
-		return &backendpb.SyncHeartbeatAck{
-			Status: pb.StatusCode_Succeed,
-			BlkSyncOffset: &backendpb.BlockSyncOffset{
+		return &backendmsg.SyncHeartbeatAck{
+			Status: msg.StatusCode_Succeed,
+			BlkSyncOffset: &backendmsg.BlockSyncOffset{
 				Ulid:   ulid,
 				MinT:   minT,
 				MaxT:   maxT,
@@ -161,16 +161,16 @@ func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendpb.SyncHeartbeat)
 	}
 
 	if err != io.EOF {
-		return &backendpb.SyncHeartbeatAck{
-			Status:  pb.StatusCode_Failed,
+		return &backendmsg.SyncHeartbeatAck{
+			Status:  msg.StatusCode_Failed,
 			Message: err.Error(),
 		}
 	}
 
 	path, err = getNextPath(filepath.Join(mgr.db.Dir(), ulid), path)
 	if err != nil {
-		return &backendpb.SyncHeartbeatAck{
-			Status:  pb.StatusCode_Failed,
+		return &backendmsg.SyncHeartbeatAck{
+			Status:  msg.StatusCode_Failed,
 			Message: err.Error(),
 		}
 	}
@@ -180,8 +180,8 @@ func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendpb.SyncHeartbeat)
 		block = getBlock(mgr.db.Blocks(), feed.createdTime, maxT)
 		if block == nil {
 			mgr.db.EnableCompactions()
-			return &backendpb.SyncHeartbeatAck{
-				Status: pb.StatusCode_Succeed,
+			return &backendmsg.SyncHeartbeatAck{
+				Status: msg.StatusCode_Succeed,
 			}
 		}
 
@@ -191,9 +191,9 @@ func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendpb.SyncHeartbeat)
 		path = metaFileName
 	}
 
-	return &backendpb.SyncHeartbeatAck{
-		Status: pb.StatusCode_Succeed,
-		BlkSyncOffset: &backendpb.BlockSyncOffset{
+	return &backendmsg.SyncHeartbeatAck{
+		Status: msg.StatusCode_Succeed,
+		BlkSyncOffset: &backendmsg.BlockSyncOffset{
 			Ulid:   ulid,
 			MinT:   minT,
 			MaxT:   maxT,
@@ -242,7 +242,7 @@ func getNextPath(blockDir, currentPath string) (string, error) {
 	return path, nil
 }
 
-func (mgr *ReplicateManager) HandleSyncHandshake(handshake *backendpb.SyncHandshake) *backendpb.SyncHandshakeAck {
+func (mgr *ReplicateManager) HandleSyncHandshake(handshake *backendmsg.SyncHandshake) *backendmsg.SyncHandshakeAck {
 	if handshake.SlaveOfNoOne {
 		feed, found := mgr.sampleFeeds.Load(handshake.SlaveAddr)
 		if found {
@@ -251,12 +251,12 @@ func (mgr *ReplicateManager) HandleSyncHandshake(handshake *backendpb.SyncHandsh
 			level.Info(Logger).Log("msg", "slave was removed", "slaveAddr", handshake.SlaveAddr)
 		}
 
-		return &backendpb.SyncHandshakeAck{Status: backendpb.HandshakeStatus_NoLongerMySlave, RelationID: mgr.RelationID()}
+		return &backendmsg.SyncHandshakeAck{Status: backendmsg.HandshakeStatus_NoLongerMySlave, RelationID: mgr.RelationID()}
 	}
 
 	if handshake.BlocksMinT != math.MinInt64 && handshake.BlocksMinT != blocksMinTime(mgr.db) {
-		return &backendpb.SyncHandshakeAck{
-			Status:     backendpb.HandshakeStatus_FailedToSync,
+		return &backendmsg.SyncHandshakeAck{
+			Status:     backendmsg.HandshakeStatus_FailedToSync,
 			RelationID: mgr.RelationID(),
 			Message:    fmt.Sprintf("dirty, not clean, master's minT: %v, slave's minT: %v", blocksMinTime(mgr.db), handshake.BlocksMinT),
 		}
@@ -269,15 +269,15 @@ func (mgr *ReplicateManager) HandleSyncHandshake(handshake *backendpb.SyncHandsh
 
 		mgr.db.DisableCompactions() //TODO multi slave
 
-		return &backendpb.SyncHandshakeAck{Status: backendpb.HandshakeStatus_NewSlave, RelationID: mgr.RelationID()}
+		return &backendmsg.SyncHandshakeAck{Status: backendmsg.HandshakeStatus_NewSlave, RelationID: mgr.RelationID()}
 	} else {
 		feed.(*sampleFeed).FlushIfNeeded()
 	}
 
-	return &backendpb.SyncHandshakeAck{Status: backendpb.HandshakeStatus_AlreadyMySlave, Message: "already my slave", RelationID: mgr.RelationID()}
+	return &backendmsg.SyncHandshakeAck{Status: backendmsg.HandshakeStatus_AlreadyMySlave, Message: "already my slave", RelationID: mgr.RelationID()}
 }
 
-func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendpb.SlaveOfCommand) *pb.GeneralResponse {
+func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfCommand) *msg.GeneralResponse {
 	mgr.Lock()
 	defer mgr.Unlock()
 
@@ -288,35 +288,35 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendpb.SlaveOfComma
 			mgr.heartbeat = nil
 
 			if err != nil {
-				return &pb.GeneralResponse{Status: pb.StatusCode_Failed, Message: err.Error()}
+				return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: err.Error()}
 			}
-			if ack.Status != backendpb.HandshakeStatus_NoLongerMySlave {
-				return &pb.GeneralResponse{Status: pb.StatusCode_Failed, Message: fmt.Sprintf("status:%s, message:%s", ack.Status, ack.Message)}
+			if ack.Status != backendmsg.HandshakeStatus_NoLongerMySlave {
+				return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: fmt.Sprintf("status:%s, message:%s", ack.Status, ack.Message)}
 			}
 
-			return &pb.GeneralResponse{Status: pb.StatusCode_Succeed}
+			return &msg.GeneralResponse{Status: msg.StatusCode_Succeed}
 		} else if mgr.heartbeat.masterAddr == slaveOfCmd.MasterAddr {
-			return &pb.GeneralResponse{Status: pb.StatusCode_Succeed, Message: "already my slave"}
+			return &msg.GeneralResponse{Status: msg.StatusCode_Succeed, Message: "already my slave"}
 		} else {
-			return &pb.GeneralResponse{Status: pb.StatusCode_Failed, Message: "already an slave of some other master, clean dirty data first"}
+			return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: "already an slave of some other master, clean dirty data first"}
 		}
 	} else {
 		if slaveOfCmd.MasterAddr == "" { //slaveof no one
-			return &pb.GeneralResponse{Status: pb.StatusCode_Succeed}
+			return &msg.GeneralResponse{Status: msg.StatusCode_Succeed}
 		} else {
 			ack, err := mgr.syncHandshake(slaveOfCmd.MasterAddr, false)
 			if err != nil {
-				return &pb.GeneralResponse{Status: pb.StatusCode_Failed, Message: err.Error()}
+				return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: err.Error()}
 			}
 			switch ack.Status {
-			case backendpb.HandshakeStatus_FailedToSync:
-				return &pb.GeneralResponse{Status: pb.StatusCode_Failed, Message: ack.Message}
-			case backendpb.HandshakeStatus_NoLongerMySlave:
-				return &pb.GeneralResponse{Status: pb.StatusCode_Failed, Message: fmt.Sprintf("unexpected slave of no one, ack msg: %s", ack.Message)}
-			case backendpb.HandshakeStatus_NewSlave:
+			case backendmsg.HandshakeStatus_FailedToSync:
+				return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: ack.Message}
+			case backendmsg.HandshakeStatus_NoLongerMySlave:
+				return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: fmt.Sprintf("unexpected slave of no one, ack msg: %s", ack.Message)}
+			case backendmsg.HandshakeStatus_NewSlave:
 				head := mgr.db.Head()
 				head.Truncate(ts.FromTime(time.Now()) - Cfg.Storage.TSDB.BlockRanges[0]/2) //clear data in mem
-			case backendpb.HandshakeStatus_AlreadyMySlave:
+			case backendmsg.HandshakeStatus_AlreadyMySlave:
 				level.Info(Logger).Log("msg", "already an slave of the master", "masterAddr", slaveOfCmd.MasterAddr)
 			}
 
@@ -327,18 +327,18 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendpb.SlaveOfComma
 			}
 			go mgr.heartbeat.start()
 
-			return &pb.GeneralResponse{Status: pb.StatusCode_Succeed, Message: ack.Message}
+			return &msg.GeneralResponse{Status: msg.StatusCode_Succeed, Message: ack.Message}
 		}
 	}
 }
 
-func (mgr *ReplicateManager) syncHandshake(masterAddr string, slaveOfNoOne bool) (*backendpb.SyncHandshakeAck, error) {
+func (mgr *ReplicateManager) syncHandshake(masterAddr string, slaveOfNoOne bool) (*backendmsg.SyncHandshakeAck, error) {
 	masterCli := client.NewBackendClient("rpl_s2m", masterAddr, 2)
 	defer masterCli.Close()
 
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 
-	reply, err := masterCli.SyncRequest(ctx, &backendpb.SyncHandshake{
+	reply, err := masterCli.SyncRequest(ctx, &backendmsg.SyncHandshake{
 		SlaveAddr:    fmt.Sprintf("%v:%v", LocalIP, Cfg.TcpPort),
 		BlocksMinT:   blocksMinTime(mgr.db),
 		SlaveOfNoOne: slaveOfNoOne,
@@ -347,7 +347,7 @@ func (mgr *ReplicateManager) syncHandshake(masterAddr string, slaveOfNoOne bool)
 		return nil, err
 	}
 
-	ack, ok := reply.(*backendpb.SyncHandshakeAck)
+	ack, ok := reply.(*backendmsg.SyncHandshakeAck)
 	if !ok {
 		return nil, errors.New("unexpected response")
 	}

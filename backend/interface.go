@@ -15,7 +15,7 @@ package backend
 
 import (
 	"context"
-	"github.com/baudtime/baudtime/msg/pb"
+	"github.com/baudtime/baudtime/msg"
 	"github.com/prometheus/prometheus/pkg/labels"
 )
 
@@ -52,7 +52,7 @@ type Querier interface {
 
 // Appender provides batched appends against a storage.
 type Appender interface {
-	Add(l []pb.Label, t int64, v float64, hash uint64) error
+	Add(l []msg.Label, t int64, v float64, hash uint64) error
 	Flush() error
 }
 

@@ -17,10 +17,9 @@ package main
 
 import (
 	"context"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
-	"github.com/baudtime/baudtime/util"
-
 	"github.com/baudtime/baudtime/backend"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
+	"github.com/baudtime/baudtime/util"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 )
@@ -46,7 +45,7 @@ type querier struct {
 // Select implements Querier and uses the given matchers to read series
 // sets from the Client.
 func (q *querier) Select(selectParams *backend.SelectParams, matchers ...*labels.Matcher) (backend.SeriesSet, error) {
-	queryRequest := &backendpb.SelectRequest{
+	queryRequest := &backendmsg.SelectRequest{
 		Mint:     q.mint,
 		Maxt:     q.maxt,
 		Interval: selectParams.Step,
@@ -63,7 +62,7 @@ func (q *querier) Select(selectParams *backend.SelectParams, matchers ...*labels
 		return nil, err
 	}
 
-	return backend.FromQueryResult(res.(*backendpb.SelectResponse)), nil
+	return backend.FromQueryResult(res.(*backendmsg.SelectResponse)), nil
 }
 
 // LabelValues implements Querier and is a noop.

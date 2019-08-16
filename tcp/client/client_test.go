@@ -21,8 +21,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/baudtime/baudtime/msg/pb"
-	gatewaypb "github.com/baudtime/baudtime/msg/pb/gateway"
+	"github.com/baudtime/baudtime/msg"
+	gatewaymsg "github.com/baudtime/baudtime/msg/gateway"
 )
 
 var staticAddrProvider = NewStaticAddrProvider("127.0.0.1:8087", "127.0.0.1:8087")
@@ -31,7 +31,7 @@ func TestBaudClient_InstantQuery(t *testing.T) {
 	c := NewGatewayClient("client_test_proxy", staticAddrProvider)
 	defer c.Close()
 
-	req := &gatewaypb.InstantQueryRequest{
+	req := &gatewaymsg.InstantQueryRequest{
 		Time:    "",
 		Timeout: "3",
 		Query:   "test[3m]",
@@ -43,14 +43,14 @@ func TestBaudClient_InstantQuery(t *testing.T) {
 		return
 	}
 
-	response, ok := resp.(*gatewaypb.QueryResponse)
+	response, ok := resp.(*gatewaymsg.QueryResponse)
 	if !ok {
 		t.Log("bad response type")
 		t.Fail()
 		return
 	}
 
-	if response.Status == pb.StatusCode_Failed {
+	if response.Status == msg.StatusCode_Failed {
 		t.Log("status code shows failed")
 		t.Fail()
 		return
@@ -64,7 +64,7 @@ func TestBaudClient_RangeQuery(t *testing.T) {
 	defer c.Close()
 
 	now := time.Now().UnixNano() / 1e9
-	req := &gatewaypb.RangeQueryRequest{
+	req := &gatewaymsg.RangeQueryRequest{
 		Start:   strconv.FormatInt(now-180, 10),
 		End:     strconv.FormatInt(now, 10),
 		Step:    "5s",
@@ -78,14 +78,14 @@ func TestBaudClient_RangeQuery(t *testing.T) {
 		return
 	}
 
-	response, ok := resp.(*gatewaypb.QueryResponse)
+	response, ok := resp.(*gatewaymsg.QueryResponse)
 	if !ok {
 		t.Log("bad response type")
 		t.Fail()
 		return
 	}
 
-	if response.Status == pb.StatusCode_Failed {
+	if response.Status == msg.StatusCode_Failed {
 		t.Log("status code shows failed")
 		t.Fail()
 		return
@@ -99,16 +99,16 @@ func TestBaudClient_Write(t *testing.T) {
 	defer c.Close()
 
 	now := time.Now().UnixNano() / 1e6
-	req := &gatewaypb.AddRequest{
-		Series: []*pb.Series{{
-			Labels: []pb.Label{
+	req := &gatewaymsg.AddRequest{
+		Series: []*msg.Series{{
+			Labels: []msg.Label{
 				{"__name__", "test"},
 				{"host", "localhost"},
 				{"app", "proxy"},
 				{"idc", "langfang"},
 				{"state", "0"},
 			},
-			Points: []pb.Point{
+			Points: []msg.Point{
 				{now - 2, 5},
 				{now - 1, 1},
 				{now, 3},
@@ -125,16 +125,16 @@ func TestBaudClient_WriteAndQuery(t *testing.T) {
 
 	for i := 0; i < 30; i++ {
 		now := time.Now().UnixNano() / 1e6
-		req := &gatewaypb.AddRequest{
-			Series: []*pb.Series{{
-				Labels: []pb.Label{
+		req := &gatewaymsg.AddRequest{
+			Series: []*msg.Series{{
+				Labels: []msg.Label{
 					{"__name__", "test"},
 					{"host", "localhost"},
 					{"app", "proxy"},
 					{"idc", "langfang"},
 					{"state", "0"},
 				},
-				Points: []pb.Point{
+				Points: []msg.Point{
 					{now - 1, 1},
 					{now, 3},
 				},
@@ -147,7 +147,7 @@ func TestBaudClient_WriteAndQuery(t *testing.T) {
 		time.Sleep(2 * time.Second)
 	}
 
-	req := &gatewaypb.InstantQueryRequest{
+	req := &gatewaymsg.InstantQueryRequest{
 		Time:    "",
 		Timeout: "3",
 		Query:   "test[3m]",
@@ -159,14 +159,14 @@ func TestBaudClient_WriteAndQuery(t *testing.T) {
 		return
 	}
 
-	response, ok := resp.(*gatewaypb.QueryResponse)
+	response, ok := resp.(*gatewaymsg.QueryResponse)
 	if !ok {
 		t.Log("bad response type")
 		t.Fail()
 		return
 	}
 
-	if response.Status == pb.StatusCode_Failed {
+	if response.Status == msg.StatusCode_Failed {
 		t.Log("status code shows failed")
 		t.Fail()
 		return

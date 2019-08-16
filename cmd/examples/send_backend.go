@@ -17,30 +17,26 @@ package main
 
 import (
 	"fmt"
-	"time"
-
-	"github.com/baudtime/baudtime/msg/pb"
-	backendpb "github.com/baudtime/baudtime/msg/pb/backend"
+	"github.com/baudtime/baudtime/msg"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/tcp/client"
 	ts "github.com/baudtime/baudtime/util/time"
-	"github.com/baudtime/baudtime/vars"
+	"time"
 )
 
 func main() {
-	vars.Init("backend_client")
-
 	cli := client.NewBackendClient("name", "localhost:8088", 2)
 
 	var t int64
 
-	s := make([]*pb.Series, 100)
-	r := &backendpb.AddRequest{s}
+	s := make([]*msg.Series, 100)
+	r := &backendmsg.AddRequest{s}
 
 	for j := 0; j < 10000; j++ {
 		for i := 0; i < 100; i++ {
 			num := fmt.Sprintf("%d", i+j)
 
-			lbs := []pb.Label{
+			lbs := []msg.Label{
 				{"__name__", "test"},
 				{"host", "localhost"},
 				{"app", "gateway"},
@@ -53,9 +49,9 @@ func main() {
 			}
 
 			t = ts.FromTime(time.Now())
-			points := []pb.Point{{t, float64(i + j*100)}}
+			points := []msg.Point{{t, float64(i + j*100)}}
 
-			r.Series[i] = &pb.Series{
+			r.Series[i] = &msg.Series{
 				Labels: lbs,
 				Points: points,
 			}

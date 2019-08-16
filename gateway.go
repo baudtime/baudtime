@@ -19,16 +19,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/baudtime/baudtime/util"
 	"math"
 	"strconv"
 	"sync"
 	"time"
 
 	"github.com/baudtime/baudtime/backend"
-	"github.com/baudtime/baudtime/msg/pb"
-	gatewaypb "github.com/baudtime/baudtime/msg/pb/gateway"
+	"github.com/baudtime/baudtime/msg"
+	gatewaymsg "github.com/baudtime/baudtime/msg/gateway"
 	"github.com/baudtime/baudtime/promql"
+	"github.com/baudtime/baudtime/util"
 	"github.com/hashicorp/go-multierror"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
@@ -48,43 +48,43 @@ type Gateway struct {
 	appenderPool sync.Pool
 }
 
-func (gateway *Gateway) InstantQuery(request *gatewaypb.InstantQueryRequest) *gatewaypb.QueryResponse {
+func (gateway *Gateway) InstantQuery(request *gatewaymsg.InstantQueryRequest) *gatewaymsg.QueryResponse {
 	result, err := gateway.instantQuery(request.Time, request.Timeout, request.Query)
 	if err != nil {
-		return &gatewaypb.QueryResponse{Status: pb.StatusCode_Failed, ErrorMsg: err.Error()}
+		return &gatewaymsg.QueryResponse{Status: msg.StatusCode_Failed, ErrorMsg: err.Error()}
 	}
 
 	queryRes, err := json.Marshal(result)
 	if err != nil {
-		return &gatewaypb.QueryResponse{Status: pb.StatusCode_Failed, ErrorMsg: err.Error()}
+		return &gatewaymsg.QueryResponse{Status: msg.StatusCode_Failed, ErrorMsg: err.Error()}
 	}
 
-	return &gatewaypb.QueryResponse{Status: pb.StatusCode_Succeed, Result: string(queryRes)}
+	return &gatewaymsg.QueryResponse{Status: msg.StatusCode_Succeed, Result: string(queryRes)}
 }
 
-func (gateway *Gateway) RangeQuery(request *gatewaypb.RangeQueryRequest) *gatewaypb.QueryResponse {
+func (gateway *Gateway) RangeQuery(request *gatewaymsg.RangeQueryRequest) *gatewaymsg.QueryResponse {
 	result, err := gateway.rangeQuery(request.Start, request.End, request.Step, request.Timeout, request.Query)
 	if err != nil {
-		return &gatewaypb.QueryResponse{Status: pb.StatusCode_Failed, ErrorMsg: err.Error()}
+		return &gatewaymsg.QueryResponse{Status: msg.StatusCode_Failed, ErrorMsg: err.Error()}
 	}
 
 	queryRes, err := json.Marshal(result)
 	if err != nil {
-		return &gatewaypb.QueryResponse{Status: pb.StatusCode_Failed, ErrorMsg: err.Error()}
+		return &gatewaymsg.QueryResponse{Status: msg.StatusCode_Failed, ErrorMsg: err.Error()}
 	}
 
-	return &gatewaypb.QueryResponse{Status: pb.StatusCode_Succeed, Result: string(queryRes)}
+	return &gatewaymsg.QueryResponse{Status: msg.StatusCode_Succeed, Result: string(queryRes)}
 }
 
-func (gateway *Gateway) LabelValues(request *gatewaypb.LabelValuesRequest) *pb.LabelValuesResponse {
+func (gateway *Gateway) LabelValues(request *gatewaymsg.LabelValuesRequest) *msg.LabelValuesResponse {
 	values, err := gateway.labelValues(request.Name, request.Constraint, request.Timeout)
 	if err != nil {
-		return &pb.LabelValuesResponse{Status: pb.StatusCode_Failed, ErrorMsg: err.Error()}
+		return &msg.LabelValuesResponse{Status: msg.StatusCode_Failed, ErrorMsg: err.Error()}
 	}
-	return &pb.LabelValuesResponse{Status: pb.StatusCode_Succeed, Values: values}
+	return &msg.LabelValuesResponse{Status: msg.StatusCode_Succeed, Values: values}
 }
 
-func (gateway *Gateway) Ingest(request *gatewaypb.AddRequest) error {
+func (gateway *Gateway) Ingest(request *gatewaymsg.AddRequest) error {
 	var err error
 	var appender backend.Appender
 
