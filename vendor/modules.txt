@@ -1,6 +1,6 @@
 # github.com/BurntSushi/toml v0.3.1
 github.com/BurntSushi/toml
-# github.com/StackExchange/wmi v0.0.0-20180725035823-b12b22c5341f
+# github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d
 github.com/StackExchange/wmi
 # github.com/alecthomas/units v0.0.0-20151022065526-2efee857e7cf
 github.com/alecthomas/units
@@ -107,10 +107,10 @@ github.com/prometheus/tsdb/index
 github.com/prometheus/tsdb/wal
 # github.com/satori/go.uuid v1.2.0
 github.com/satori/go.uuid
-# github.com/shirou/gopsutil v2.19.6+incompatible
+# github.com/shirou/gopsutil v2.18.12+incompatible
 github.com/shirou/gopsutil/disk
 github.com/shirou/gopsutil/internal/common
-# github.com/stretchr/testify v1.3.0
+# github.com/stretchr/testify v1.4.0
 github.com/stretchr/testify/require
 github.com/stretchr/testify/assert
 # github.com/tinylib/msgp v1.1.0
@@ -151,7 +151,7 @@ golang.org/x/net/http2
 golang.org/x/net/http2/hpack
 golang.org/x/net/http/httpguts
 golang.org/x/net/idna
-# golang.org/x/sync v0.0.0-20190227155943-e225da77a7e6
+# golang.org/x/sync v0.0.0-20190423024810-112230192c58
 golang.org/x/sync/errgroup
 # golang.org/x/sys v0.0.0-20190403152447-81d4e9dc473e
 golang.org/x/sys/unix
@@ -169,7 +169,7 @@ golang.org/x/text/unicode/bidi
 golang.org/x/text/unicode/norm
 # google.golang.org/genproto v0.0.0-20190307195333-5fe7a883aa19
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.19.1
+# google.golang.org/grpc v1.23.0
 google.golang.org/grpc
 google.golang.org/grpc/codes
 google.golang.org/grpc/credentials
@@ -185,6 +185,7 @@ google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/proto
 google.golang.org/grpc/internal
 google.golang.org/grpc/internal/backoff
+google.golang.org/grpc/internal/balancerload
 google.golang.org/grpc/internal/binarylog
 google.golang.org/grpc/internal/channelz
 google.golang.org/grpc/internal/envconfig
@@ -196,6 +197,7 @@ google.golang.org/grpc/peer
 google.golang.org/grpc/resolver
 google.golang.org/grpc/resolver/dns
 google.golang.org/grpc/resolver/passthrough
+google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/tap
 google.golang.org/grpc/credentials/internal
@@ -204,3 +206,5 @@ google.golang.org/grpc/binarylog/grpc_binarylog_v1
 google.golang.org/grpc/internal/syscall
 # gopkg.in/natefinch/lumberjack.v2 v2.0.0
 gopkg.in/natefinch/lumberjack.v2
+# gopkg.in/yaml.v2 v2.2.2
+gopkg.in/yaml.v2
