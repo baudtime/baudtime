@@ -35,6 +35,7 @@ type entry struct {
 type shard struct {
 	items map[interface{}]interface{}
 	sync.RWMutex
+	_ [40]byte
 }
 
 func (s *shard) ForEach(entrys []entry, fn func(key, val interface{}) bool) bool {

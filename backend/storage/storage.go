@@ -178,7 +178,7 @@ func New(db *tsdb.DB) *Storage {
 			appender: db.Appender,
 			addStat:  &AddStat{},
 			symbolsK: syn.NewMap(1024),
-			symbolsV: syn.NewMap(1 << 14),
+			symbolsV: syn.NewMap(1 << 15),
 		},
 		ReplicateManager: replication.NewReplicateManager(db),
 	}
