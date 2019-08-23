@@ -74,9 +74,14 @@ func (m seriesHashMap) del(hash uint64) {
 	}
 }
 
+const (
+	stripeSize = 1 << 14
+	stripeMask = stripeSize - 1
+)
+
 type appender struct {
 	client  Client
-	series  seriesHashMap
+	series  [stripeSize]seriesHashMap
 	toFlush backendmsg.AddRequest
 }
 
@@ -85,30 +90,38 @@ func newAppender(shardID string, localStorage *storage.Storage) (*appender, erro
 		return nil, errors.New("invalid backend shard id")
 	}
 
-	return &appender{
+	app := &appender{
 		client: &ShardClient{
 			shardID:      shardID,
 			localStorage: localStorage,
 		},
-		series: seriesHashMap{},
-	}, nil
+	}
+	for i := range app.series {
+		app.series[i] = seriesHashMap{}
+	}
+
+	return app, nil
 }
 
 func (app *appender) Add(l []msg.Label, t int64, v float64, hash uint64) error {
-	s := app.series.get(hash, l)
+	i := hash & stripeMask
+
+	s := app.series[i].get(hash, l)
 	if s == nil {
 		s = seriesPool.Get().(*msg.Series)
 		s.Labels = l
-		app.series.set(hash, s)
+		app.series[i].set(hash, s)
 	}
 	s.Points = append(s.Points, msg.Point{T: t, V: v})
 	return nil
 }
 
 func (app *appender) Flush() error {
-	for k, ss := range app.series {
-		app.toFlush.Series = append(app.toFlush.Series, ss...)
-		app.series.del(k)
+	for i := 0; i < stripeSize; i++ {
+		for k, ss := range app.series[i] {
+			app.toFlush.Series = append(app.toFlush.Series, ss...)
+			app.series[i].del(k)
+		}
 	}
 	err := app.client.Add(context.TODO(), &app.toFlush)
 
