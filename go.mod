@@ -21,6 +21,7 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.9.6 // indirect
 	github.com/hashicorp/go-multierror v1.0.0
+	github.com/influxdata/influxdb1-client v0.0.0-20190809212627-fc22c7df067e
 	github.com/jonboulle/clockwork v0.1.0 // indirect
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/peterh/liner v1.1.0

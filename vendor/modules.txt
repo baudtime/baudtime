@@ -46,6 +46,11 @@ github.com/golang/snappy
 github.com/hashicorp/errwrap
 # github.com/hashicorp/go-multierror v1.0.0
 github.com/hashicorp/go-multierror
+# github.com/influxdata/influxdb1-client v0.0.0-20190809212627-fc22c7df067e
+github.com/influxdata/influxdb1-client
+github.com/influxdata/influxdb1-client/v2
+github.com/influxdata/influxdb1-client/models
+github.com/influxdata/influxdb1-client/pkg/escape
 # github.com/klauspost/compress v1.4.0
 github.com/klauspost/compress/flate
 github.com/klauspost/compress/gzip
@@ -107,7 +112,7 @@ github.com/prometheus/tsdb/index
 github.com/prometheus/tsdb/wal
 # github.com/satori/go.uuid v1.2.0
 github.com/satori/go.uuid
-# github.com/shirou/gopsutil v2.18.12+incompatible
+# github.com/shirou/gopsutil v0.0.0-20190731134726-d80c43f9c984
 github.com/shirou/gopsutil/disk
 github.com/shirou/gopsutil/internal/common
 # github.com/stretchr/testify v1.4.0
@@ -153,7 +158,7 @@ golang.org/x/net/http/httpguts
 golang.org/x/net/idna
 # golang.org/x/sync v0.0.0-20190423024810-112230192c58
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.0.0-20190403152447-81d4e9dc473e
+# golang.org/x/sys v0.0.0-20190813064441-fde4db37ae7a
 golang.org/x/sys/unix
 golang.org/x/sys/windows
 # golang.org/x/text v0.3.2
