@@ -42,43 +42,50 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, it *tm.TimestampIter) ([]*msg.Series, error) {
+func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, tIt *tm.TimestampIter) ([]*msg.Series, error) {
 	ms, err := ProtoToMatchers(matchers)
 	if err != nil {
 		return nil, err
 	}
 
-	sMap := make(map[string]*msg.Series, 0)
+	var (
+		series []*msg.Series
+		pIt    *BufferedSeriesIterator
+	)
 
-	for it.Next() {
-		ts := it.At()
+	set, err := q.Select(ms...)
+	if err != nil {
+		return nil, err
+	}
 
-		set, err := q.Select(ms...)
-		if err != nil {
-			return nil, err
+	for set.Next() {
+		curSeries := set.At()
+
+		if pIt == nil {
+			pIt = NewBufferIterator(curSeries.Iterator(), tm.DurationMilliSec(vars.Cfg.Storage.TSDB.LookbackDelta))
+		} else {
+			pIt.Reset(curSeries.Iterator())
 		}
 
-		for set.Next() {
-			curSeries := set.At()
-			it := NewBufferIterator(curSeries.Iterator(), tm.DurationMilliSec(vars.Cfg.Storage.TSDB.LookbackDelta))
+		var points []msg.Point
+		for tIt.Next() {
+			ts := tIt.At()
+
 			var t int64
 			var v float64
 
-			ok := it.Seek(ts)
+			ok := pIt.Seek(ts)
 			if !ok {
-				err = it.Err()
+				err = pIt.Err()
 				if err != nil {
 					return nil, err
 				}
-			}
-			if ok {
-				t, v = it.Values()
+			} else {
+				t, v = pIt.Values()
 			}
 
-			peek := 1
 			if !ok || t > ts {
-				t, v, ok = it.PeekBack(peek)
-				peek++
+				t, v, ok = pIt.PeekBack(1)
 				if !ok || t < ts-tm.DurationMilliSec(vars.Cfg.Storage.TSDB.LookbackDelta) {
 					continue
 				}
@@ -87,22 +94,17 @@ func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, it *tm.Timest
 				continue
 			}
 
-			lblStr := curSeries.Labels().String()
-			if s, ok := sMap[lblStr]; !ok {
-				sMap[lblStr] = &msg.Series{
-					Labels: LabelsToProto(curSeries.Labels()),
-					Points: []msg.Point{{V: v, T: t}},
-				}
-			} else {
-				s.Points = append(s.Points, msg.Point{V: v, T: t})
-			}
+			points = append(points, msg.Point{V: v, T: t})
 		}
+
+		series = append(series, &msg.Series{
+			Labels: LabelsToProto(curSeries.Labels()),
+			Points: points,
+		})
+
+		tIt.Reset()
 	}
 
-	series := make([]*msg.Series, 0, len(sMap))
-	for _, v := range sMap {
-		series = append(series, v)
-	}
 	return series, nil
 }
 

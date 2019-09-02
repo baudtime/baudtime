@@ -75,6 +75,10 @@ func (it *TimestampIter) At() int64 {
 	return it.cur
 }
 
+func (it *TimestampIter) Reset() {
+	it.cur = 0
+}
+
 func Exponential(d, min, max time.Duration) time.Duration {
 	d *= 2
 	if d < min {
