@@ -19,7 +19,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/pkg/errors"
 	"io"
 	"net"
 	"sort"
@@ -32,8 +31,9 @@ import (
 	"github.com/baudtime/baudtime/util"
 	"github.com/baudtime/baudtime/util/redo"
 	"github.com/baudtime/baudtime/vars"
-	"github.com/coreos/etcd/clientv3"
 	"github.com/go-kit/kit/log/level"
+	"github.com/pkg/errors"
+	"go.etcd.io/etcd/clientv3"
 )
 
 type Node struct {

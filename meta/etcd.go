@@ -23,10 +23,11 @@ import (
 
 	"github.com/baudtime/baudtime/util/redo"
 	"github.com/baudtime/baudtime/vars"
-	"github.com/coreos/etcd/clientv3"
-	"github.com/coreos/etcd/clientv3/concurrency"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
+	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/clientv3/concurrency"
+	"google.golang.org/grpc"
 )
 
 type ClientRefer struct {
@@ -43,6 +44,7 @@ func (r *ClientRefer) Ref() (*clientv3.Client, error) {
 		cli, err := clientv3.New(clientv3.Config{
 			Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
 			DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
+			DialOptions: []grpc.DialOption{grpc.WithBlock()},
 		})
 		if err != nil {
 			return nil, err
