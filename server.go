@@ -18,6 +18,7 @@ package baudtime
 import (
 	"context"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"syscall"
@@ -127,7 +128,7 @@ func (obs *tcpServerObserver) OnAccept(tcpConn *net.TCPConn) *tcp.ReadWriteLoop 
 		case *backendmsg.SyncHeartbeat:
 			response.SetRaw(obs.storage.ReplicateManager.HandleHeartbeat(request))
 		case *backendmsg.AdminCmdInfo:
-			info, _, err := obs.storage.Info()
+			info, err := obs.storage.Info(false)
 			if err != nil {
 				response.SetRaw(&msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: err.Error()})
 			} else {
@@ -169,14 +170,21 @@ func Run() {
 		}
 
 		localStorage = storage.New(db)
-		heartbeat = meta.NewHeartbeat(time.Duration(Cfg.Storage.StatReport.SessionExpireTTL), time.Duration(Cfg.Storage.StatReport.HeartbeartInterval), func() (node meta.Node, err error) {
-			node, _, err = localStorage.Info()
-			return
+		heartbeat = meta.NewHeartbeat(time.Duration(Cfg.Storage.StatReport.SessionExpireTTL), time.Duration(Cfg.Storage.StatReport.HeartbeartInterval), func() (meta.Node, error) {
+			stat, err := localStorage.Info(false)
+			return stat.Node, err
 		})
 
-		router.GET("/stat", localStorage.HandleHttpStat)
 		router.GET("/joinCluster", func(ctx *fasthttp.RequestCtx) {
 			localStorage.ReplicateManager.JoinCluster()
+		})
+		router.GET("/stat", func(ctx *fasthttp.RequestCtx) {
+			stat, err := localStorage.Info(true)
+			if err != nil {
+				ctx.Error(err.Error(), http.StatusInternalServerError)
+			} else {
+				ctx.SuccessString("text/plain", stat.String())
+			}
 		})
 		router.GET("/dump", func(ctx *fasthttp.RequestCtx) {
 			dir := "/tmp/baudtime/dump"

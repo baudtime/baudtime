@@ -45,7 +45,7 @@ type ReplicateManager struct {
 	db                 *tsdb.DB
 	sampleFeeds        *sync.Map //map[string]*sampleFeed
 	heartbeat          *Heartbeat
-	lastTRecvHeartbeat atomic.Value
+	lastTRecvHeartbeat int64
 	sync.RWMutex
 }
 
@@ -91,7 +91,7 @@ func (mgr *ReplicateManager) HandleWriteReq(request []byte) {
 
 func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendmsg.SyncHeartbeat) *backendmsg.SyncHeartbeatAck {
 	//level.Info(Logger).Log("msg", "receive heartbeat from slave", "slaveAddr", heartbeat.SlaveAddr)
-	mgr.lastTRecvHeartbeat.Store(time.Now())
+	atomic.StoreInt64(&mgr.lastTRecvHeartbeat, time.Now().Unix())
 
 	var feed *sampleFeed
 
@@ -409,14 +409,10 @@ func (mgr *ReplicateManager) Close() error {
 	return nil
 }
 
-func (mgr *ReplicateManager) LastHeartbeat() (recv time.Time, send time.Time) {
-	if v := mgr.lastTRecvHeartbeat.Load(); v != nil {
-		recv = v.(time.Time)
-	}
+func (mgr *ReplicateManager) LastHeartbeatTime() (recv, send int64) {
+	recv = atomic.LoadInt64(&mgr.lastTRecvHeartbeat)
 	if mgr.heartbeat != nil {
-		if v := mgr.heartbeat.lastTSendHeartbeat.Load(); v != nil {
-			send = v.(time.Time)
-		}
+		send = atomic.LoadInt64(&mgr.heartbeat.lastTSendHeartbeat)
 	}
 	return
 }

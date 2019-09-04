@@ -18,11 +18,9 @@ package meta
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -48,8 +46,6 @@ type Node struct {
 	once       sync.Once `json:"-"`
 }
 
-var EmptyNode = Node{}
-
 func (node Node) Addr() string {
 	node.once.Do(func() {
 		if node.IP != "" && node.Port != "" {
@@ -61,21 +57,6 @@ func (node Node) Addr() string {
 		}
 	})
 	return node.addr
-}
-
-func (node Node) String() string {
-	s := "Shard: " + node.ShardID + "\n" +
-		"IP: " + node.IP + "\n" +
-		"Port: " + node.Port + "\n" +
-		"DiskFree: " + strconv.FormatUint(node.DiskFree, 10) + "GB\n" +
-		"IDC: " + node.IDC
-
-	if node.MasterIP != "" && node.MasterPort != "" {
-		s += fmt.Sprintf("\nMasterIP: %v", node.MasterIP)
-		s += fmt.Sprintf("\nMasterPort: %v", node.MasterPort)
-	}
-
-	return s
 }
 
 func (node Node) MayOnline() bool {

@@ -48,7 +48,7 @@ type Heartbeat struct {
 	relationID         string
 	masterCli          *client.Client
 	closed             uint32
-	lastTSendHeartbeat atomic.Value
+	lastTSendHeartbeat int64
 }
 
 func (h *Heartbeat) start() {
@@ -83,7 +83,7 @@ func (h *Heartbeat) start() {
 			continue
 		}
 
-		h.lastTSendHeartbeat.Store(time.Now())
+		atomic.StoreInt64(&h.lastTSendHeartbeat, time.Now().Unix())
 
 		if ack.Status != msg.StatusCode_Succeed {
 			level.Error(Logger).Log("error", ack.Message)

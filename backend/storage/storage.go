@@ -17,14 +17,6 @@ package storage
 
 import (
 	"bytes"
-	"encoding/json"
-	"math"
-	"net/http"
-	"reflect"
-	"strings"
-	"sync/atomic"
-	"time"
-
 	"github.com/baudtime/baudtime/backend/storage/replication"
 	"github.com/baudtime/baudtime/meta"
 	"github.com/baudtime/baudtime/msg"
@@ -39,7 +31,10 @@ import (
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 	"github.com/shirou/gopsutil/disk"
-	"github.com/valyala/fasthttp"
+	"math"
+	"reflect"
+	"strings"
+	"sync/atomic"
 )
 
 func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, tIt *tm.TimestampIter) ([]*msg.Series, error) {
@@ -178,7 +173,6 @@ func New(db *tsdb.DB) *Storage {
 		DB: db,
 		AddReqHandler: &AddReqHandler{
 			appender: db.Appender,
-			addStat:  &AddStat{},
 			symbolsK: syn.NewMap(1024),
 			symbolsV: syn.NewMap(1 << 15),
 		},
@@ -292,10 +286,17 @@ func (storage *Storage) HandleLabelValuesReq(request *backendmsg.LabelValuesRequ
 	return queryResponse
 }
 
-func (storage *Storage) Info() (meta.Node, *AddStat, error) {
+func (storage *Storage) Close() (err error) {
+	err = multierror.Append(err, storage.ReplicateManager.Close(), storage.DB.Close())
+	return
+}
+
+func (storage *Storage) Info(detailed bool) (Stat, error) {
+	stat := Stat{}
+
 	diskUsage, err := disk.Usage(vars.Cfg.Storage.TSDB.Path)
 	if err != nil {
-		return meta.EmptyNode, storage.addStat, err
+		return stat, err
 	}
 
 	masterIP, masterPort := "", ""
@@ -306,82 +307,46 @@ func (storage *Storage) Info() (meta.Node, *AddStat, error) {
 		masterPort = ipPort[1]
 	}
 
-	return meta.Node{
+	stat.Node = meta.Node{
 		ShardID:    storage.ReplicateManager.RelationID(),
 		IP:         vars.LocalIP,
 		Port:       vars.Cfg.TcpPort,
 		DiskFree:   uint64(math.Round(float64(diskUsage.Free) / 1073741824.0)), //GB
 		MasterIP:   masterIP,
 		MasterPort: masterPort,
-	}, storage.addStat, nil
-}
-
-func (storage *Storage) Close() (err error) {
-	err = multierror.Append(err, storage.ReplicateManager.Close(), storage.DB.Close())
-	return
-}
-
-func (storage *Storage) HandleHttpStat(ctx *fasthttp.RequestCtx) {
-	node, addStat, _ := storage.Info()
-	recvTimeHb, sendTimeHb := storage.ReplicateManager.LastHeartbeat()
-	hMinT := storage.DB.Head().MinTime()
-	hMaxT := storage.DB.Head().MaxTime()
-	hMinValidTime := reflect.ValueOf(storage.DB.Head()).Elem().FieldByName("minValidTime").Int()
-	minValidTime := hMinValidTime
-	if minValidTime < hMaxT-vars.Cfg.Storage.TSDB.BlockRanges[0]/2 {
-		minValidTime = hMaxT - vars.Cfg.Storage.TSDB.BlockRanges[0]/2
 	}
 
-	toTime := func(t int64) time.Time {
-		if t <= 0 {
-			return time.Time{}
-		}
-		return tm.Time(t)
+	if !detailed {
+		return stat, nil
 	}
 
-	body, err := json.Marshal(struct {
-		Node          meta.Node
-		Slaves        []string
-		LastRecvHb    time.Time
-		LastSendHb    time.Time
-		AddStatis     *AddStat
-		BlockNum      int
-		HMinTime      time.Time
-		HMaxTime      time.Time
-		HMinValidTime time.Time
-		MinValidTime  time.Time
-	}{
-		Node:          node,
-		Slaves:        storage.ReplicateManager.Slaves(),
-		LastRecvHb:    recvTimeHb,
-		LastSendHb:    sendTimeHb,
-		AddStatis:     addStat,
-		BlockNum:      len(storage.DB.Blocks()),
-		HMinTime:      toTime(hMinT),
-		HMaxTime:      toTime(hMaxT),
-		HMinValidTime: toTime(hMinValidTime),
-		MinValidTime:  toTime(minValidTime),
-	})
-	if err != nil {
-		ctx.Error(err.Error(), http.StatusInternalServerError)
-	} else {
-		ctx.Response.Header.Set("Content-Type", "application/json")
-		ctx.SetBody(body)
+	recvTimeHb, sendTimeHb := storage.ReplicateManager.LastHeartbeatTime()
+	headMinT := storage.DB.Head().MinTime()
+	headMaxT := storage.DB.Head().MaxTime()
+	headMinValidTime := reflect.ValueOf(storage.DB.Head()).Elem().FieldByName("minValidTime").Int()
+	appMinValidTime := headMinValidTime
+	if appMinValidTime < headMaxT-vars.Cfg.Storage.TSDB.BlockRanges[0]/2 {
+		appMinValidTime = headMaxT - vars.Cfg.Storage.TSDB.BlockRanges[0]/2
 	}
-}
 
-type AddStat struct {
-	Received    uint64
-	Succeed     uint64
-	Failed      uint64
-	OutOfOrder  uint64
-	AmendSample uint64
-	OutOfBounds uint64
+	stat.DbStat = &DbStat{
+		AddStats:             storage.addStat,
+		SeriesNum:            storage.DB.Head().NumSeries(),
+		BlockNum:             len(storage.DB.Blocks()),
+		HeadMinTime:          headMinT,
+		HeadMaxTime:          headMaxT,
+		HeadMinValidTime:     headMinValidTime,
+		AppenderMinValidTime: appMinValidTime,
+		LastRecvHb:           recvTimeHb,
+		LastSendHb:           sendTimeHb,
+	}
+
+	return stat, nil
 }
 
 type AddReqHandler struct {
 	appender func() tsdb.Appender
-	addStat  *AddStat
+	addStat  AddStat
 	symbolsK *syn.Map
 	symbolsV *syn.Map
 }
