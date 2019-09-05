@@ -410,3 +410,12 @@ func (addReqHandler *AddReqHandler) HandleAddReq(request *backendmsg.AddRequest)
 
 	return multiErr
 }
+
+func (addReqHandler *AddReqHandler) ResetStat() {
+	atomic.StoreUint64(&addReqHandler.addStat.Received, 0)
+	atomic.StoreUint64(&addReqHandler.addStat.Succeed, 0)
+	atomic.StoreUint64(&addReqHandler.addStat.Failed, 0)
+	atomic.StoreUint64(&addReqHandler.addStat.OutOfOrder, 0)
+	atomic.StoreUint64(&addReqHandler.addStat.AmendSample, 0)
+	atomic.StoreUint64(&addReqHandler.addStat.OutOfBounds, 0)
+}

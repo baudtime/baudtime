@@ -179,6 +179,9 @@ func Run() {
 			localStorage.ReplicateManager.JoinCluster()
 		})
 		router.GET("/stat", func(ctx *fasthttp.RequestCtx) {
+			if arg := ctx.QueryArgs().Peek("reset"); arg != nil {
+				localStorage.AddReqHandler.ResetStat()
+			}
 			stat, err := localStorage.Info(true)
 			if err != nil {
 				ctx.Error(err.Error(), http.StatusInternalServerError)
