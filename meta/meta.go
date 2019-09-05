@@ -138,7 +138,7 @@ func (m *meta) getShardIDsFromEtcd(metricName string, day uint64) ([]string, str
 	return shardGroup, sGrpRouteKey, nil
 }
 
-func (m *meta) RefreshCluster() error {
+func (m *meta) Refresh() error {
 	if !atomic.CompareAndSwapUint32(&m.refreshing, 0, 1) {
 		return nil
 	}
@@ -260,11 +260,11 @@ func (m *meta) watch() {
 
 							var node Node
 							if err = json.Unmarshal(ev.PrevKv.Value, &node); err == nil {
-								FailoverIfNeeded(&node)
+								FailoverIfNeeded(node.ShardID)
 							}
 						}
 					}
-					m.RefreshCluster()
+					m.Refresh()
 				}
 			}
 		}()
@@ -278,7 +278,7 @@ func Watch() error {
 		routeInfos: new(sync.Map),
 	}
 
-	err := m.RefreshCluster()
+	err := m.Refresh()
 	if err != nil {
 		return err
 	}
@@ -315,18 +315,18 @@ func GetSlaves(shardID string) []*Node {
 	return shard.Slaves
 }
 
-func FailoverIfNeeded(node *Node) {
-	if node == nil {
-		return
-	}
-
-	shard, found := globalMeta.GetShard(node.ShardID)
-
+func FailoverIfNeeded(shardID string) {
+	shard, found := globalMeta.GetShard(shardID)
 	if !found {
 		return
 	}
 
-	if node.MayOnline() {
+	if shard.Master == nil {
+		globalMeta.Refresh()
+		if shard.Master != nil {
+			return
+		}
+	} else if shard.Master.MayOnline() {
 		return
 	}
 
@@ -345,24 +345,23 @@ func FailoverIfNeeded(node *Node) {
 	defer atomic.StoreUint32(&shard.failovering, 0)
 
 	failoverErr := mutexRun("failover", func(session *concurrency.Session) error {
-		master := GetMaster(node.ShardID)
-		if master != nil && master.Addr() != node.Addr() { //already failover by other gateway
+		master := GetMaster(shardID)
+		if master != nil && (shard.Master == nil || master.Addr() != shard.Master.Addr()) { //already failover by other gateway
 			return nil
 		}
 
-		slaves := GetSlaves(node.ShardID)
+		slaves := GetSlaves(shardID)
 		if len(slaves) == 0 {
 			return errors.New("no available slave to failover")
 		}
 
-		var chosen *Node
-		for _, slave := range slaves {
-			if slave.IDC == node.IDC {
-				chosen = slave
+		chosen := slaves[0]
+		if master != nil {
+			for _, slave := range slaves {
+				if slave.IDC == master.IDC {
+					chosen = slave
+				}
 			}
-		}
-		if chosen == nil {
-			chosen = slaves[0]
 		}
 
 		slaveConn, err := tcp.Connect(chosen.Addr())
@@ -376,7 +375,7 @@ func FailoverIfNeeded(node *Node) {
 			return err
 		}
 
-		level.Warn(vars.Logger).Log("msg", "failover triggered", "shard", node.ShardID, "chosen", chosen.Addr())
+		level.Warn(vars.Logger).Log("msg", "failover triggered", "shard", shardID, "chosen", chosen.Addr())
 
 		c := make(chan struct{})
 		go func() {
@@ -397,7 +396,7 @@ func FailoverIfNeeded(node *Node) {
 				if reply.Status != msg.StatusCode_Succeed {
 					err = errors.New(reply.Message)
 				} else {
-					level.Warn(vars.Logger).Log("msg", "failover succeed", "shard", node.ShardID, "chosen", chosen.Addr())
+					level.Warn(vars.Logger).Log("msg", "failover succeed", "shard", shardID, "chosen", chosen.Addr())
 				}
 			}
 		}()
@@ -407,12 +406,12 @@ func FailoverIfNeeded(node *Node) {
 		case <-time.After(15 * time.Second):
 		}
 
-		globalMeta.RefreshCluster()
+		globalMeta.Refresh()
 
 		return err
 	})
 
 	if failoverErr != nil {
-		level.Error(vars.Logger).Log("msg", "error occurred when failover ", "shard", node.ShardID, "err", failoverErr)
+		level.Error(vars.Logger).Log("msg", "error occurred when failover ", "shard", shardID, "err", failoverErr)
 	}
 }

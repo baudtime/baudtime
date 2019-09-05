@@ -88,7 +88,7 @@ func (c *ShardClient) exeQuery(query func(node *meta.Node) (resp msg.Message, er
 		}
 	}
 
-	meta.FailoverIfNeeded(master)
+	meta.FailoverIfNeeded(c.shardID)
 
 	slaves := meta.GetSlaves(c.shardID)
 	if len(slaves) > 1 {
@@ -209,23 +209,21 @@ func (c *ShardClient) Add(ctx context.Context, req *backendmsg.AddRequest) (err 
 	}
 
 	master := meta.GetMaster(c.shardID)
-	if master == nil {
-		return errors.Errorf("master not found, may be down? shard id: %s", c.shardID)
-	}
+	if master != nil {
+		if c.localStorage != nil && master.IP == vars.LocalIP && master.Port == vars.Cfg.TcpPort {
+			return c.localStorage.HandleAddReq(req)
+		}
 
-	if c.localStorage != nil && master.IP == vars.LocalIP && master.Port == vars.Cfg.TcpPort {
-		return c.localStorage.HandleAddReq(req)
-	}
-
-	var cli *client.Client
-	if cli, err = defaultFactory.getClient(master.Addr()); err == nil {
-		if err = cli.AsyncRequest(req, nil); err == nil {
-			return
+		var cli *client.Client
+		if cli, err = defaultFactory.getClient(master.Addr()); err == nil {
+			if err = cli.AsyncRequest(req, nil); err == nil {
+				return
+			}
 		}
 	}
 
-	meta.FailoverIfNeeded(master)
-	return
+	meta.FailoverIfNeeded(c.shardID)
+	return errors.Errorf("master not found, may be down? shard id: %s", c.shardID)
 }
 
 func (c *ShardClient) Close() error {
