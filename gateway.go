@@ -109,7 +109,7 @@ func (gateway *Gateway) Ingest(request *gatewaymsg.AddRequest) error {
 	}
 
 	if er := appender.Flush(); er != nil {
-		err = multierror.Append(err, err)
+		err = multierror.Append(err, er)
 	}
 
 	gateway.appenderPool.Put(appender)
