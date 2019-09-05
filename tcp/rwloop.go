@@ -140,9 +140,16 @@ func (loop *ReadWriteLoop) Write(msg Message) error {
 	bytes := bytesPool.Get(1 + binary.MaxVarintLen64 + msg.SizeOfRaw()).([]byte)
 	n, err := loop.codec.Encode(msg, bytes)
 	if err != nil {
+		bytesPool.Put(bytes)
 		return err
 	}
-	return loop.out.Enqueue(bytes[:n])
+
+	err = loop.out.Enqueue(bytes[:n])
+	if err != nil {
+		bytesPool.Put(bytes)
+	}
+
+	return err
 }
 
 func (loop *ReadWriteLoop) CloseWrite() (err error) {
