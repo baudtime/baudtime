@@ -85,7 +85,7 @@ func (stat Stat) String() string {
 		buf = append(append(append(buf, "HeadMinValidTime: "...), tsToString(stat.HeadMinValidTime)...), lnBreak)
 		buf = append(append(append(buf, "AppenderMinValidTime: "...), tsToString(stat.AppenderMinValidTime)...), lnBreak)
 		buf = append(append(append(buf, "LastRecvHb: "...), tsToString(stat.LastRecvHb)...), lnBreak)
-		buf = append(append(append(buf, "LastSendHb: "...), tsToString(stat.LastSendHb)...), lnBreak)
+		buf = append(append(buf, "LastSendHb: "...), tsToString(stat.LastSendHb)...)
 	}
 
 	return util.YoloString(buf)

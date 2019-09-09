@@ -128,7 +128,7 @@ func (obs *tcpServerObserver) OnAccept(tcpConn *net.TCPConn) *tcp.ReadWriteLoop 
 		case *backendmsg.SyncHeartbeat:
 			response.SetRaw(obs.storage.ReplicateManager.HandleHeartbeat(request))
 		case *backendmsg.AdminCmdInfo:
-			info, err := obs.storage.Info(false)
+			info, err := obs.storage.Info(true)
 			if err != nil {
 				response.SetRaw(&msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: err.Error()})
 			} else {

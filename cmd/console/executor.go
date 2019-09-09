@@ -239,7 +239,7 @@ func (e *executor) execComand(cmd msg.Message) error {
 			if r.Status == msg.StatusCode_Succeed {
 				fmt.Println(r.Message)
 			} else {
-				fmt.Println("Err")
+				fmt.Println("error occurred!", r.Message)
 			}
 		case *msg.LabelValuesResponse:
 			if r.Status == msg.StatusCode_Succeed {
