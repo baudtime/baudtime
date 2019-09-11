@@ -64,13 +64,6 @@ func (stat Stat) String() string {
 		buf = append(append(append(buf, "MasterPort: "...), stat.Node.MasterPort...), lnBreak)
 	}
 
-	tsToString := func(t int64) string {
-		if t <= 0 {
-			return strconv.FormatInt(t, 10)
-		}
-		return tm.Time(t).Format(time.RFC3339)
-	}
-
 	if stat.DbStat != nil {
 		buf = append(append(append(buf, "Received: "...), strconv.FormatUint(stat.AddStats.Received, 10)...), lnBreak)
 		buf = append(append(append(buf, "Succeed: "...), strconv.FormatUint(stat.AddStats.Succeed, 10)...), lnBreak)
@@ -89,4 +82,11 @@ func (stat Stat) String() string {
 	}
 
 	return util.YoloString(buf)
+}
+
+func tsToString(t int64) string {
+	if t <= 0 {
+		return strconv.FormatInt(t, 10)
+	}
+	return tm.Time(t).Format(time.RFC3339)
 }

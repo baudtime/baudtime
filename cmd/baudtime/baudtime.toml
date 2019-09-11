@@ -1,4 +1,3 @@
-# let the baudtime run as the roles of both gateway and backend
 tcp_port = "8088"
 http_port = "80"
 max_conn = 10000
@@ -13,12 +12,12 @@ namespace = "n1"
 
 [gateway]
   conn_num_per_backend = 5
+  query_strategy = "masterfirst"
   [gateway.route]
-    route_info_ttl = "8784h"
-    shard_group_cap = 1
+    shard_group_ttl = "8784h"
+    shard_group_tick_interval = "24h"
   [gateway.appender]
-    sample_num_batch_send = 300
-    max_interval_send = "10s"
+    async_transfer = true
   [gateway.query_engine]
     concurrency = 50
     timeout = "2m"

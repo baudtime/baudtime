@@ -27,5 +27,6 @@ require (
 	github.com/valyala/fasthttp v1.4.0
 	go.etcd.io/etcd v0.0.0-20190830150955-898bd1351fcf
 	golang.org/x/text v0.3.0
+	google.golang.org/grpc v1.23.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )

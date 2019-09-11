@@ -18,6 +18,7 @@ package backend
 import (
 	"context"
 	"github.com/baudtime/baudtime/backend/storage"
+	"github.com/baudtime/baudtime/backend/visitor"
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/pkg/errors"
@@ -94,6 +95,7 @@ func newAppender(shardID string, localStorage *storage.Storage) (*appender, erro
 		client: &ShardClient{
 			shardID:      shardID,
 			localStorage: localStorage,
+			exeQuery:     visitor.NOOP,
 		},
 	}
 	for i := range app.series {

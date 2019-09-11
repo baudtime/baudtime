@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/baudtime/baudtime/backend/storage"
+	"github.com/baudtime/baudtime/backend/visitor"
 	"github.com/baudtime/baudtime/meta"
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
@@ -42,7 +43,7 @@ type Client interface {
 }
 
 type clientFactory struct {
-	clients *sync.Map
+	clients sync.Map
 }
 
 func (factory *clientFactory) getClient(address string) (*client.Client, error) {
@@ -66,46 +67,12 @@ func (factory *clientFactory) destroy(address string) (err error) {
 	return
 }
 
-var defaultFactory = &clientFactory{
-	clients: new(sync.Map),
-}
+var defaultFactory clientFactory
 
 type ShardClient struct {
 	shardID      string
 	localStorage *storage.Storage
-}
-
-func (c *ShardClient) exeQuery(query func(node *meta.Node) (resp msg.Message, err error)) (resp msg.Message, err error) {
-	var multiErr error
-
-	master := meta.GetMaster(c.shardID)
-
-	if master != nil {
-		if resp, err = query(master); err != nil {
-			multiErr = multierror.Append(multiErr, err)
-		} else {
-			return
-		}
-	}
-
-	meta.FailoverIfNeeded(c.shardID)
-
-	slaves := meta.GetSlaves(c.shardID)
-	if len(slaves) > 1 {
-		for _, node := range slaves[1:] {
-			if resp, err = query(node); err != nil {
-				multiErr = multierror.Append(multiErr, err)
-			} else {
-				return
-			}
-		}
-	}
-
-	if multiErr != nil {
-		return nil, multiErr
-	} else {
-		return nil, errors.Errorf("shard %v has no available data node", c.shardID)
-	}
+	exeQuery     visitor.Visitor
 }
 
 func (c *ShardClient) Select(ctx context.Context, req *backendmsg.SelectRequest) (*backendmsg.SelectResponse, error) {
@@ -126,7 +93,13 @@ func (c *ShardClient) Select(ctx context.Context, req *backendmsg.SelectRequest)
 		req.SpanCtx = carrier.Bytes()
 	}
 
-	resp, err := c.exeQuery(func(node *meta.Node) (msg.Message, error) {
+	shard, found := meta.GetShard(c.shardID)
+	if !found || shard == nil {
+		meta.RefreshTopology()
+		return nil, errors.Errorf("no such shard %v", c.shardID)
+	}
+
+	resp, err := c.exeQuery(shard, func(node *meta.Node) (msg.Message, error) {
 		if c.localStorage != nil && node.IP == vars.LocalIP && node.Port == vars.Cfg.TcpPort {
 			if resp := c.localStorage.HandleSelectReq(req); resp.Status != msg.StatusCode_Succeed {
 				return nil, errors.Errorf("select error on %s, err:%s", node.Addr(), resp.ErrorMsg)
@@ -173,7 +146,13 @@ func (c *ShardClient) LabelValues(ctx context.Context, req *backendmsg.LabelValu
 		req.SpanCtx = carrier.Bytes()
 	}
 
-	resp, err := c.exeQuery(func(node *meta.Node) (msg.Message, error) {
+	shard, found := meta.GetShard(c.shardID)
+	if !found || shard == nil {
+		meta.RefreshTopology()
+		return nil, errors.Errorf("no such shard %v", c.shardID)
+	}
+
+	resp, err := c.exeQuery(shard, func(node *meta.Node) (msg.Message, error) {
 		if c.localStorage != nil && node.IP == vars.LocalIP && node.Port == vars.Cfg.TcpPort {
 			if resp := c.localStorage.HandleLabelValuesReq(req); resp.Status != msg.StatusCode_Succeed {
 				return nil, errors.Errorf("select error on %s, err:%s", node.Addr(), resp.ErrorMsg)
@@ -216,8 +195,23 @@ func (c *ShardClient) Add(ctx context.Context, req *backendmsg.AddRequest) (err 
 
 		var cli *client.Client
 		if cli, err = defaultFactory.getClient(master.Addr()); err == nil {
-			if err = cli.AsyncRequest(req, nil); err == nil {
-				return
+			if vars.Cfg.Gateway.Appender.AsyncTransfer {
+				if err = cli.AsyncRequest(req, nil); err == nil {
+					return
+				}
+			} else {
+				var resp msg.Message
+				if resp, err = cli.SyncRequest(ctx, req); err == nil {
+					generalResp, ok := resp.(*msg.GeneralResponse)
+					if !ok {
+						return tcp.BadMsgTypeError
+					}
+					if generalResp.Status == msg.StatusCode_Failed {
+						return errors.New(generalResp.Message)
+					} else {
+						return nil
+					}
+				}
 			}
 		}
 	}

@@ -15,13 +15,13 @@ type EtcdCommonConfig struct {
 }
 
 type RouteConfig struct {
-	RouteInfoTTL  toml.Duration `toml:"route_info_ttl"`
-	ShardGroupCap int           `toml:"shard_group_cap"`
+	ShardGroupTTL          toml.Duration `toml:"shard_group_ttl"`
+	ShardGroupTickInterval toml.Duration `toml:"shard_group_tick_interval"`
+	HostMinDGBiskLeft      uint64        `toml:"host_min_gb_disk_left"`
 }
 
 type AppenderConfig struct {
-	SampleNumBatchSend int           `toml:"sample_num_batch_send"`
-	MaxIntervalSend    toml.Duration `toml:"max_interval_send"`
+	AsyncTransfer bool `toml:"async_transfer"`
 }
 
 type QueryEngineConfig struct {
@@ -36,6 +36,7 @@ type RuleConfig struct {
 
 type GatewayConfig struct {
 	ConnNumPerBackend int                `toml:"conn_num_per_backend"`
+	QueryStrategy     string             `toml:"query_strategy"`
 	Route             RouteConfig        `toml:"route"`
 	Appender          *AppenderConfig    `toml:"appender,omitempty"`
 	QueryEngine       *QueryEngineConfig `toml:"query_engine,omitempty"`
@@ -85,7 +86,7 @@ type Config struct {
 	Jaeger     *JaegerConfig    `toml:"jaeger,omitempty"`
 }
 
-var Cfg = &Config{
+var Cfg = Config{
 	TcpPort:   "8121",
 	HttpPort:  "8080",
 	MaxConn:   10000,
@@ -101,7 +102,7 @@ var Cfg = &Config{
 }
 
 func LoadConfig(tomlFile string) error {
-	err := toml.LoadFromToml(tomlFile, Cfg)
+	err := toml.LoadFromToml(tomlFile, &Cfg)
 	if err != nil {
 		return err
 	}

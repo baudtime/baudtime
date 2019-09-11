@@ -67,51 +67,10 @@ func (r *ClientRefer) UnRef() {
 	}
 }
 
-type lease struct {
-	day     uint64
-	leaseID clientv3.LeaseID
-	sync.Mutex
-}
-
 var (
 	ErrKeyNotFound = errors.New("key not found in etcd")
 	clientRef      ClientRefer
-	leases         [366]lease
 )
-
-func getEtcdLease(day uint64) (clientv3.LeaseID, error) {
-	idx := day % 366
-	l := leases[idx]
-
-	l.Lock()
-	defer l.Unlock()
-
-	if l.leaseID != clientv3.NoLease && l.day == day {
-		return l.leaseID, nil
-	}
-
-	ttl := int64(vars.Cfg.Gateway.Route.RouteInfoTTL) / 1e9
-
-	cli, err := clientRef.Ref()
-	if err != nil {
-		return -1, err
-	}
-	defer clientRef.UnRef()
-
-	if l.leaseID != clientv3.NoLease {
-		cli.Revoke(context.Background(), l.leaseID)
-	}
-
-	leaseResp, err := cli.Grant(context.Background(), ttl)
-	if err != nil {
-		return -1, err
-	}
-
-	l.day = day
-	l.leaseID = leaseResp.ID
-
-	return l.leaseID, nil
-}
 
 func exist(k string) (bool, error) {
 	var resp *clientv3.GetResponse
@@ -232,6 +191,26 @@ func etcdPut(k string, v interface{}, leaseID clientv3.LeaseID) error {
 			cancel()
 			return er
 		})
+
+		if err != nil {
+			return true, err
+		}
+		return false, nil
+	})
+}
+
+func etcdDel(k string) error {
+	return redo.Retry(time.Duration(vars.Cfg.EtcdCommon.RetryInterval), vars.Cfg.EtcdCommon.RetryNum, func() (bool, error) {
+		cli, err := clientRef.Ref()
+		if err != nil {
+			return true, err
+		}
+		defer clientRef.UnRef()
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.EtcdCommon.RWTimeout))
+
+		_, err = cli.Delete(ctx, k)
+		cancel()
 
 		if err != nil {
 			return true, err

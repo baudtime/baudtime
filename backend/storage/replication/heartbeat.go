@@ -83,7 +83,7 @@ func (h *Heartbeat) start() {
 			continue
 		}
 
-		atomic.StoreInt64(&h.lastTSendHeartbeat, time.Now().Unix())
+		atomic.StoreInt64(&h.lastTSendHeartbeat, t.FromTime(time.Now()))
 
 		if ack.Status != msg.StatusCode_Succeed {
 			level.Error(Logger).Log("error", ack.Message)

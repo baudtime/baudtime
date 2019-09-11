@@ -286,9 +286,8 @@ func (storage *Storage) HandleLabelValuesReq(request *backendmsg.LabelValuesRequ
 	return queryResponse
 }
 
-func (storage *Storage) Close() (err error) {
-	err = multierror.Append(err, storage.ReplicateManager.Close(), storage.DB.Close())
-	return
+func (storage *Storage) Close() error {
+	return multierror.Append(storage.ReplicateManager.Close(), storage.DB.Close())
 }
 
 func (storage *Storage) Info(detailed bool) (Stat, error) {

@@ -32,7 +32,7 @@ import (
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/tcp/client"
-	ts "github.com/baudtime/baudtime/util/time"
+	t "github.com/baudtime/baudtime/util/time"
 	. "github.com/baudtime/baudtime/vars"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
@@ -91,7 +91,7 @@ func (mgr *ReplicateManager) HandleWriteReq(request []byte) {
 
 func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendmsg.SyncHeartbeat) *backendmsg.SyncHeartbeatAck {
 	//level.Info(Logger).Log("msg", "receive heartbeat from slave", "slaveAddr", heartbeat.SlaveAddr)
-	atomic.StoreInt64(&mgr.lastTRecvHeartbeat, time.Now().Unix())
+	atomic.StoreInt64(&mgr.lastTRecvHeartbeat, t.FromTime(time.Now()))
 
 	var feed *sampleFeed
 
@@ -315,7 +315,7 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfComm
 				return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: fmt.Sprintf("unexpected slave of no one, ack msg: %s", ack.Message)}
 			case backendmsg.HandshakeStatus_NewSlave:
 				head := mgr.db.Head()
-				head.Truncate(ts.FromTime(time.Now()) - Cfg.Storage.TSDB.BlockRanges[0]/2) //clear data in mem
+				head.Truncate(t.FromTime(time.Now()) - Cfg.Storage.TSDB.BlockRanges[0]/2) //clear data in mem
 			case backendmsg.HandshakeStatus_AlreadyMySlave:
 				level.Info(Logger).Log("msg", "already an slave of the master", "masterAddr", slaveOfCmd.MasterAddr)
 			}

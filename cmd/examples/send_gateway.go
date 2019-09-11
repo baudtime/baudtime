@@ -40,7 +40,7 @@ func send_gateway() {
 			lbs := []msg.Label{
 				{"__name__", "test"},
 				{"host", "localhost"},
-				{"app", "gateway"},
+				{"to", "gateway"},
 				{"idc", "langfang"},
 				{"state", "0"},
 				{"aaa", "xz"},

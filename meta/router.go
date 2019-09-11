@@ -17,19 +17,18 @@ package meta
 
 import (
 	"github.com/baudtime/baudtime/msg"
-	tm "github.com/baudtime/baudtime/util/time"
+	"github.com/baudtime/baudtime/vars"
 	"github.com/cespare/xxhash"
 	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
-	"sync"
 	"time"
 )
 
 var (
-	baseTime, _      = time.Parse("2006-01-02 15:04:05", "2019-01-01 00:00:00")
-	globalRouter     *router
-	globalRouterOnce sync.Once
+	baseTime, _  = time.Parse("2006-01-02 15:04:05", "2019-01-01 00:00:00")
+	globalRouter = router{meta: &globalMeta}
+	routingKey   = "__rk__"
 )
 
 //router's responsibility is computing
@@ -38,41 +37,24 @@ type router struct {
 }
 
 func Router() *router {
-	if globalRouter == nil {
-		globalRouterOnce.Do(func() {
-			globalRouter = &router{meta: globalMeta}
-		})
-	}
-	return globalRouter
+	return &globalRouter
 }
 
 //used by write
 func (r *router) GetShardIDByLabels(t time.Time, lbls []msg.Label, hash uint64) (string, error) {
-	var (
-		err        error
-		metricName string
-	)
-
-	for _, l := range lbls {
-		if l.Name == labels.MetricName {
-			metricName = l.Value
-		}
-	}
-	if metricName == "" {
-		return "", errors.New("metric name not found in labels")
-	}
-
-	shardGroup, shardGrpRouteK, err := r.meta.getShardIDs(metricName, day(t))
+	shardGroup, err := r.meta.getShardGroup(tickNO(t))
 	if err != nil {
 		return "", err
 	}
 
-	if shardGrpRouteK != "" && len(shardGroup) > 0 {
-		for _, l := range lbls {
-			if l.Name == shardGrpRouteK {
-				idx := xxhash.Sum64String(l.Value) % uint64(len(shardGroup))
-				return shardGroup[idx], nil
-			}
+	if len(shardGroup) == 0 {
+		return "", errors.New("shard group is empty")
+	}
+
+	for _, l := range lbls {
+		if l.Name == routingKey {
+			idx := xxhash.Sum64String(l.Value) % uint64(len(shardGroup))
+			return shardGroup[idx], nil
 		}
 	}
 
@@ -81,31 +63,19 @@ func (r *router) GetShardIDByLabels(t time.Time, lbls []msg.Label, hash uint64) 
 }
 
 func (r *router) GetShardIDsByTime(t time.Time, matchers ...*labels.Matcher) ([]string, error) {
-	var (
-		err        error
-		metricName string
-	)
-
-	for _, m := range matchers {
-		if m.Name == labels.MetricName {
-			metricName = m.Value
-		}
-	}
-	if metricName == "" {
-		return nil, errors.New("metric name not found in matchers")
-	}
-
-	shardGroup, shardGrpRouteK, err := r.meta.getShardIDs(metricName, day(t))
+	shardGroup, err := r.meta.getShardGroup(tickNO(t))
 	if err != nil {
 		return nil, err
 	}
 
-	if shardGrpRouteK != "" && len(shardGroup) > 0 {
-		for _, m := range matchers {
-			if m.Name == shardGrpRouteK && m.Type == labels.MatchEqual {
-				idx := xxhash.Sum64String(m.Value) % uint64(len(shardGroup))
-				return []string{shardGroup[idx]}, nil
-			}
+	if len(shardGroup) == 0 {
+		return nil, errors.New("shard group is empty")
+	}
+
+	for _, m := range matchers {
+		if m.Name == routingKey && m.Type == labels.MatchEqual {
+			idx := xxhash.Sum64String(m.Value) % uint64(len(shardGroup))
+			return shardGroup[idx : idx+1], nil
 		}
 	}
 
@@ -143,6 +113,6 @@ func (r *router) GetShardIDsByTimeSpan(from, to time.Time, matchers ...*labels.M
 	return ids, multiErr
 }
 
-func day(t time.Time) uint64 {
-	return uint64(t.Sub(baseTime) / tm.Day)
+func tickNO(t time.Time) uint64 {
+	return uint64(t.Sub(baseTime) / time.Duration(vars.Cfg.Gateway.Route.ShardGroupTickInterval))
 }

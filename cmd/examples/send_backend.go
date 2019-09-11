@@ -39,7 +39,7 @@ func main() {
 			lbs := []msg.Label{
 				{"__name__", "test"},
 				{"host", "localhost"},
-				{"app", "gateway"},
+				{"to", "backend"},
 				{"idc", "langfang"},
 				{"state", "0"},
 				{"aaa", "xz"},

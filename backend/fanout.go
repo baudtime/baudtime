@@ -21,10 +21,13 @@ import (
 	"sync"
 
 	"github.com/baudtime/baudtime/backend/storage"
+	"github.com/baudtime/baudtime/backend/visitor"
 	"github.com/baudtime/baudtime/meta"
 	"github.com/baudtime/baudtime/msg"
 	"github.com/baudtime/baudtime/util/time"
+	"github.com/baudtime/baudtime/vars"
 	"github.com/hashicorp/go-multierror"
+	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 )
@@ -66,7 +69,6 @@ func (f *Fanout) Close() (err error) {
 }
 
 type fanoutQuerier struct {
-	sync.Once
 	ctx        context.Context
 	mint, maxt int64
 	Querier
@@ -77,6 +79,11 @@ func (q *fanoutQuerier) Select(params *SelectParams, matchers ...*labels.Matcher
 	shardIDs, err := meta.Router().GetShardIDsByTimeSpan(time.Time(q.mint), time.Time(q.maxt), matchers...)
 	if err != nil {
 		return emptySeriesSet, err
+	}
+
+	shardVisitor, found := visitor.GetVisitor(vars.Cfg.Gateway.QueryStrategy)
+	if !found {
+		return emptySeriesSet, errors.Errorf("query strategy %v not found", vars.Cfg.Gateway.QueryStrategy)
 	}
 
 	queriers := make([]Querier, 0, len(shardIDs))
@@ -92,6 +99,7 @@ func (q *fanoutQuerier) Select(params *SelectParams, matchers ...*labels.Matcher
 			client: &ShardClient{
 				shardID:      shardID,
 				localStorage: q.localStorage,
+				exeQuery:     shardVisitor,
 			},
 		})
 	}
@@ -102,6 +110,11 @@ func (q *fanoutQuerier) Select(params *SelectParams, matchers ...*labels.Matcher
 
 func (q *fanoutQuerier) LabelValues(name string, matchers ...*labels.Matcher) ([]string, error) {
 	allShards := meta.AllShards()
+
+	shardVisitor, found := visitor.GetVisitor(vars.Cfg.Gateway.QueryStrategy)
+	if !found {
+		return nil, errors.Errorf("query strategy %v not found", vars.Cfg.Gateway.QueryStrategy)
+	}
 
 	queriers := make([]Querier, 0, len(allShards))
 	for shardID := range allShards {
@@ -116,6 +129,7 @@ func (q *fanoutQuerier) LabelValues(name string, matchers ...*labels.Matcher) ([
 			client: &ShardClient{
 				shardID:      shardID,
 				localStorage: q.localStorage,
+				exeQuery:     shardVisitor,
 			},
 		})
 	}

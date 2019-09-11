@@ -16,50 +16,41 @@
 package meta
 
 import (
+	"github.com/baudtime/baudtime/vars"
 	"sync"
 )
 
 type RouteInfo struct {
-	metricName string
-	Timeline   uint64
-	*sync.Map
-	ShardGrpRouteK string
-	sync.Mutex
+	Timeline uint64
+	sync.Map
 }
 
-func NewRouteInfo(metricName string) *RouteInfo {
-	return &RouteInfo{
-		metricName:     metricName,
-		Timeline:       0,
-		Map:            new(sync.Map),
-		ShardGrpRouteK: "",
-	}
-}
-
-func (r *RouteInfo) Put(day uint64, v []string) {
-	if r.Timeline < day {
-		r.Timeline = day
+func (r *RouteInfo) Put(tickNO uint64, v []string) (evicted []uint64) {
+	if r.Timeline < tickNO {
+		r.Timeline = tickNO
 	}
 
-	r.Map.Store(day, v)
+	r.Map.Store(tickNO, v)
 
-	var toDelete []interface{}
-	r.Map.Range(func(day, value interface{}) bool {
-		if r.Timeline-day.(uint64) > 366 {
-			toDelete = append(toDelete, day)
+	tickNum := uint64(vars.Cfg.Gateway.Route.ShardGroupTTL / vars.Cfg.Gateway.Route.ShardGroupTickInterval)
+
+	r.Map.Range(func(tickNO, value interface{}) bool {
+		if r.Timeline-tickNO.(uint64) > tickNum {
+			evicted = append(evicted, tickNO.(uint64))
 		}
 		return true
 	})
 
-	if len(toDelete) > 0 {
-		for d := range toDelete {
-			r.Map.Delete(d)
+	if len(evicted) > 0 {
+		for t := range evicted {
+			r.Map.Delete(t)
 		}
 	}
+	return
 }
 
-func (r *RouteInfo) Get(day uint64) ([]string, bool) {
-	v, found := r.Map.Load(day)
+func (r *RouteInfo) Get(tickNO uint64) ([]string, bool) {
+	v, found := r.Map.Load(tickNO)
 	if found {
 		return v.([]string), true
 	}

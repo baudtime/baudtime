@@ -50,7 +50,7 @@ type tcpServerObserver struct {
 
 func (obs *tcpServerObserver) OnStart() error {
 	if obs.gateway != nil {
-		if err := meta.Watch(); err != nil {
+		if err := meta.Init(); err != nil {
 			level.Error(Logger).Log("msg", "failed to init meta data", "err", err)
 			return err
 		}

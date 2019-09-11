@@ -237,7 +237,11 @@ func (e *executor) execComand(cmd msg.Message) error {
 		switch r := reply.(type) {
 		case *msg.GeneralResponse:
 			if r.Status == msg.StatusCode_Succeed {
-				fmt.Println(r.Message)
+				if r.Message != "" {
+					fmt.Println(r.Message)
+				} else {
+					fmt.Println("ok")
+				}
 			} else {
 				fmt.Println("error occurred!", r.Message)
 			}

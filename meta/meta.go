@@ -38,6 +38,7 @@ import (
 )
 
 type Shard struct {
+	ID          string
 	Master      *Node
 	Slaves      []*Node
 	failovering uint32
@@ -45,104 +46,81 @@ type Shard struct {
 
 //meta's responsibility is to provide our necessary data
 type meta struct {
-	sync.Once
-	shards     unsafe.Pointer //point to a map[string]*Shard
-	routeInfos *sync.Map
-	refreshing uint32
+	shards           unsafe.Pointer //point to a map[string]*Shard
+	route            RouteInfo
+	refreshingShards uint32
+	refreshingRoute  uint32
+	watching         uint32
 }
 
-func (m *meta) getShardIDs(metricName string, day uint64) ([]string, string, error) {
-	shardGroup, shardGrpRouteK, found := m.getShardIDsFromCache(metricName, day)
+func (m *meta) getShardGroup(tickNO uint64) ([]string, error) {
+	shardGroup, found := m.route.Get(tickNO)
 	if found {
-		return shardGroup, shardGrpRouteK, nil
+		return shardGroup, nil
 	}
 
 	var err error
-
-	routeInfo := m.getRouteInfoFromCache(metricName)
-	routeInfo.Lock()
-
-	shardGroup, shardGrpRouteK, found = m.getShardIDsFromCache(metricName, day)
-	if !found {
-		shardGroup, shardGrpRouteK, err = m.getShardIDsFromEtcd(metricName, day)
-		if err == nil {
-			routeInfo.ShardGrpRouteK = shardGrpRouteK
-			routeInfo.Put(day, shardGroup)
-		}
+	shardGroup, err = m.getShardGroupFromEtcd(tickNO)
+	if err != nil {
+		return nil, err
 	}
 
-	routeInfo.Unlock()
-
-	return shardGroup, shardGrpRouteK, err
-}
-
-func (m *meta) getRouteInfoFromCache(metricName string) *RouteInfo {
-	routeInfo, ok := m.routeInfos.Load(metricName)
-	if !ok {
-		routeInfo, _ = m.routeInfos.LoadOrStore(metricName, NewRouteInfo(metricName))
+	evicted := m.route.Put(tickNO, shardGroup)
+	for _, tickNO := range evicted {
+		etcdDel(routeInfoPrefix() + strconv.FormatUint(tickNO, 10))
 	}
-	return routeInfo.(*RouteInfo)
+	return shardGroup, nil
 }
 
-func (m *meta) getShardIDsFromCache(metricName string, day uint64) ([]string, string, bool) {
-	routeInfo := m.getRouteInfoFromCache(metricName)
+func (m *meta) getShardGroupFromEtcd(tickNO uint64) ([]string, error) {
+	level.Info(vars.Logger).Log("msg", "get shards from etcd", "tickNO", tickNO)
 
-	shardGroup, found := routeInfo.Get(day)
-	return shardGroup, routeInfo.ShardGrpRouteK, found
-}
+	var shardGroup []string
 
-func (m *meta) getShardIDsFromEtcd(metricName string, day uint64) ([]string, string, error) {
-	level.Info(vars.Logger).Log("msg", "get shards from etcd", "metric", metricName, "day", day)
-
-	sGrpRouteKey := ""
-	err := etcdGet(sGrpRoutePrefix()+metricName, &sGrpRouteKey)
-	if err != nil && err != ErrKeyNotFound {
-		return nil, "", err
-	}
-
-	shardGroup := make([]string, 0, vars.Cfg.Gateway.Route.ShardGroupCap)
-
-	key := routeInfoPrefix() + metricName + "/" + strconv.FormatUint(day, 10)
-	err = etcdGet(key, &shardGroup)
+	key := routeInfoPrefix() + strconv.FormatUint(tickNO, 10)
+	err := etcdGet(key, &shardGroup)
 	if err == nil {
-		return shardGroup, sGrpRouteKey, nil
+		return shardGroup, nil
 	}
 
 	if err != ErrKeyNotFound {
-		return nil, "", err
+		return nil, err
 	}
 
 	masters, err := GetMasters()
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	if len(masters) < vars.Cfg.Gateway.Route.ShardGroupCap {
-		return nil, "", errors.Errorf("not enough shards to init %v", key)
+	for i := 0; i < len(masters); i++ {
+		if masters[i].DiskFree >= vars.Cfg.Gateway.Route.HostMinDGBiskLeft && masters[i].ShardID != "" {
+			shardGroup = append(shardGroup, masters[i].ShardID)
+		}
 	}
 
-	for i := 0; i < vars.Cfg.Gateway.Route.ShardGroupCap && i < len(masters); i++ {
-		shardGroup = append(shardGroup, masters[i].ShardID)
+	if len(shardGroup) == 0 {
+		return nil, errors.Errorf("not enough shards to init %v", key)
 	}
 
-	leaseID, err := getEtcdLease(day)
+	err = etcdPut(key, shardGroup, clientv3.NoLease)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
-	err = etcdPut(key, shardGroup, leaseID)
-	if err != nil {
-		return nil, "", err
-	}
-
-	return shardGroup, sGrpRouteKey, nil
+	return shardGroup, nil
 }
 
-func (m *meta) Refresh() error {
-	if !atomic.CompareAndSwapUint32(&m.refreshing, 0, 1) {
+func (m *meta) GetShard(shardID string) (shard *Shard, found bool) {
+	shards := (*map[string]*Shard)(atomic.LoadPointer(&m.shards))
+	shard, found = (*shards)[shardID]
+	return
+}
+
+func (m *meta) RefreshTopology() error {
+	if !atomic.CompareAndSwapUint32(&m.refreshingShards, 0, 1) {
 		return nil
 	}
-	defer atomic.StoreUint32(&m.refreshing, 0)
+	defer atomic.StoreUint32(&m.refreshingShards, 0)
 
 	shards := make(map[string]*Shard)
 
@@ -156,7 +134,7 @@ func (m *meta) Refresh() error {
 
 		shard, found := shards[n.ShardID]
 		if !found {
-			shard = new(Shard)
+			shard = &Shard{ID: n.ShardID}
 			shards[n.ShardID] = shard
 		}
 
@@ -171,128 +149,149 @@ func (m *meta) Refresh() error {
 	return nil
 }
 
-func (m *meta) GetShard(shardID string) (shard *Shard, found bool) {
-	shards := (*map[string]*Shard)(atomic.LoadPointer(&m.shards))
-	shard, found = (*shards)[shardID]
-	return
-}
+func (m *meta) RefreshRoute() error {
+	if !atomic.CompareAndSwapUint32(&m.refreshingRoute, 0, 1) {
+		return nil
+	}
+	defer atomic.StoreUint32(&m.refreshingRoute, 0)
 
-func (m *meta) watch() {
-	m.Do(func() {
-		go func() {
-			cli, err := clientv3.New(clientv3.Config{
-				Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
-				DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
-			})
-			if err != nil {
-				level.Error(vars.Logger).Log("msg", "failed to connect to etcd", "err", err)
-				os.Exit(1)
-			}
-			defer cli.Close()
-
-			rch := cli.Watch(context.Background(), routeInfoPrefix(), clientv3.WithPrefix())
-			gch := cli.Watch(context.Background(), sGrpRoutePrefix(), clientv3.WithPrefix())
-			nch := cli.Watch(context.Background(), nodePrefix(), clientv3.WithPrefix(), clientv3.WithPrevKV())
-
-			var wresp clientv3.WatchResponse
-
-			level.Info(vars.Logger).Log("msg", "i am watching etcd events now")
-			for {
-				select {
-				case wresp = <-rch:
-					for _, ev := range wresp.Events {
-						level.Warn(vars.Logger).Log(
-							"msg", "get etcd event",
-							"type", ev.Type,
-							"key", ev.Kv.Key,
-							"value", ev.Kv.Value,
-						)
-
-						strArray := strings.Split(string(ev.Kv.Key), "/")
-						metricName := strings.TrimPrefix(strArray[0], routeInfoPrefix())
-						day, err := strconv.ParseUint(strArray[1], 10, 0)
-						if err != nil {
-							continue
-						}
-
-						if ev.Type == mvccpb.DELETE {
-							routeInfo := m.getRouteInfoFromCache(metricName)
-							routeInfo.Delete(day)
-							if day == routeInfo.Timeline {
-								m.routeInfos.Delete(metricName)
-							}
-						} else {
-							shardGroup := make([]string, 0, vars.Cfg.Gateway.Route.ShardGroupCap)
-							if err = json.Unmarshal(ev.Kv.Value, &shardGroup); err == nil {
-								routeInfo := m.getRouteInfoFromCache(metricName)
-								routeInfo.Put(day, shardGroup)
-							}
-						}
-					}
-				case wresp = <-gch:
-					for _, ev := range wresp.Events {
-						level.Warn(vars.Logger).Log(
-							"msg", "get etcd event",
-							"type", ev.Type,
-							"key", ev.Kv.Key,
-							"value", ev.Kv.Value,
-						)
-
-						metricName := strings.TrimPrefix(string(ev.Kv.Key), sGrpRoutePrefix())
-						routeInfo := m.getRouteInfoFromCache(metricName)
-						if ev.Type == mvccpb.DELETE {
-							routeInfo.ShardGrpRouteK = ""
-						} else {
-							routeInfo.ShardGrpRouteK = string(ev.Kv.Value)
-						}
-					}
-				case wresp = <-nch:
-					for _, ev := range wresp.Events {
-						if ev.Type == mvccpb.DELETE && ev.PrevKv != nil {
-							level.Warn(vars.Logger).Log(
-								"msg", "get etcd event",
-								"type", ev.Type,
-								"key", ev.Kv.Key,
-								"value", ev.Kv.Value,
-								"preKey", ev.PrevKv.Key,
-								"preValue", ev.PrevKv.Value,
-							)
-
-							var node Node
-							if err = json.Unmarshal(ev.PrevKv.Value, &node); err == nil {
-								FailoverIfNeeded(node.ShardID)
-							}
-						}
-					}
-					m.Refresh()
-				}
-			}
-		}()
-	})
-}
-
-var globalMeta *meta
-
-func Watch() error {
-	m := &meta{
-		routeInfos: new(sync.Map),
+	resp, err := etcdGetWithPrefix(routeInfoPrefix())
+	if err == ErrKeyNotFound {
+		return nil
 	}
 
-	err := m.Refresh()
 	if err != nil {
 		return err
 	}
 
-	m.watch()
-	globalMeta = m
+	for _, kv := range resp.Kvs {
+		t := strings.TrimPrefix(string(kv.Key), routeInfoPrefix())
+		tickNO, err := strconv.ParseUint(t, 10, 0)
+		if err != nil {
+			continue
+		}
 
-	level.Info(vars.Logger).Log("msg", "watching nodes")
+		var shardGroup []string
+		err = json.Unmarshal(kv.Value, &shardGroup)
+		if err != nil {
+			continue
+		}
+
+		evicted := m.route.Put(tickNO, shardGroup)
+		for _, tickNO := range evicted {
+			etcdDel(routeInfoPrefix() + strconv.FormatUint(tickNO, 10))
+		}
+	}
 	return nil
+}
+
+func (m *meta) watch() {
+	if !atomic.CompareAndSwapUint32(&m.watching, 0, 1) {
+		return
+	}
+	go func() {
+		defer atomic.StoreUint32(&m.watching, 0)
+
+		cli, err := clientv3.New(clientv3.Config{
+			Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
+			DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
+		})
+		if err != nil {
+			level.Error(vars.Logger).Log("msg", "failed to connect to etcd", "err", err)
+			os.Exit(1)
+		}
+		defer cli.Close()
+
+		rch := cli.Watch(context.Background(), routeInfoPrefix(), clientv3.WithPrefix())
+		nch := cli.Watch(context.Background(), nodePrefix(), clientv3.WithPrefix(), clientv3.WithPrevKV())
+
+		var wresp clientv3.WatchResponse
+
+		level.Info(vars.Logger).Log("msg", "i am watching etcd events now")
+		for {
+			select {
+			case wresp = <-rch:
+				for _, ev := range wresp.Events {
+					level.Warn(vars.Logger).Log(
+						"msg", "get etcd event",
+						"type", ev.Type,
+						"key", ev.Kv.Key,
+						"value", ev.Kv.Value,
+					)
+
+					t := strings.TrimPrefix(string(ev.Kv.Key), routeInfoPrefix())
+					tickNO, err := strconv.ParseUint(t, 10, 0)
+					if err != nil {
+						continue
+					}
+
+					if ev.Type == mvccpb.DELETE {
+						m.route.Delete(tickNO)
+					} else {
+						var shardGroup []string
+						if err = json.Unmarshal(ev.Kv.Value, &shardGroup); err == nil {
+							evicted := m.route.Put(tickNO, shardGroup)
+							for _, tickNO := range evicted {
+								etcdDel(routeInfoPrefix() + strconv.FormatUint(tickNO, 10))
+							}
+						}
+					}
+				}
+			case wresp = <-nch:
+				for _, ev := range wresp.Events {
+					if ev.Type == mvccpb.DELETE && ev.PrevKv != nil {
+						level.Warn(vars.Logger).Log(
+							"msg", "get etcd event",
+							"type", ev.Type,
+							"key", ev.Kv.Key,
+							"value", ev.Kv.Value,
+							"preKey", ev.PrevKv.Key,
+							"preValue", ev.PrevKv.Value,
+						)
+
+						var node Node
+						if err = json.Unmarshal(ev.PrevKv.Value, &node); err == nil {
+							FailoverIfNeeded(node.ShardID)
+						}
+					}
+				}
+				m.RefreshTopology()
+			}
+		}
+	}()
+}
+
+var (
+	globalMeta meta
+	initOnce   sync.Once
+)
+
+func Init() (err error) {
+	initOnce.Do(func() {
+		err = globalMeta.RefreshTopology()
+		if err != nil {
+			return
+		}
+
+		err = globalMeta.RefreshRoute()
+		if err != nil {
+			return
+		}
+
+		globalMeta.watch()
+
+		level.Info(vars.Logger).Log("msg", "watching nodes")
+	})
+	return
 }
 
 func AllShards() map[string]*Shard {
 	shards := (*map[string]*Shard)(atomic.LoadPointer(&globalMeta.shards))
 	return *shards
+}
+
+func GetShard(shardID string) (*Shard, bool) {
+	return globalMeta.GetShard(shardID)
 }
 
 func GetMaster(shardID string) *Node {
@@ -315,6 +314,10 @@ func GetSlaves(shardID string) []*Node {
 	return shard.Slaves
 }
 
+func RefreshTopology() error {
+	return globalMeta.RefreshTopology()
+}
+
 func FailoverIfNeeded(shardID string) {
 	shard, found := globalMeta.GetShard(shardID)
 	if !found {
@@ -322,7 +325,7 @@ func FailoverIfNeeded(shardID string) {
 	}
 
 	if shard.Master == nil {
-		globalMeta.Refresh()
+		globalMeta.RefreshTopology()
 		if shard.Master != nil {
 			return
 		}
@@ -406,12 +409,12 @@ func FailoverIfNeeded(shardID string) {
 		case <-time.After(15 * time.Second):
 		}
 
-		globalMeta.Refresh()
+		globalMeta.RefreshTopology()
 
 		return err
 	})
 
 	if failoverErr != nil {
-		level.Error(vars.Logger).Log("msg", "error occurred when failover ", "shard", shardID, "err", failoverErr)
+		level.Error(vars.Logger).Log("msg", "error occurred when failover", "shard", shardID, "err", failoverErr)
 	}
 }

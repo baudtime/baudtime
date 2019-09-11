@@ -13,22 +13,23 @@
  * limitations under the License.
  */
 
-package meta
+package visitor
 
-import "github.com/baudtime/baudtime/vars"
+import (
+	"github.com/baudtime/baudtime/meta"
+	"github.com/baudtime/baudtime/msg"
+)
 
-var nodePfx, routeInfoPfx string
+type Visitor func(shard *meta.Shard, op func(node *meta.Node) (resp msg.Message, err error)) (resp msg.Message, err error)
 
-func nodePrefix() string {
-	if nodePfx == "" {
-		nodePfx = vars.Cfg.NameSpace + "_node_"
+var (
+	registry = make(map[string]Visitor)
+	NOOP     = func(shard *meta.Shard, op func(node *meta.Node) (resp msg.Message, err error)) (resp msg.Message, err error) {
+		return nil, nil
 	}
-	return nodePfx
-}
+)
 
-func routeInfoPrefix() string {
-	if routeInfoPfx == "" {
-		routeInfoPfx = vars.Cfg.NameSpace + "_routeInfo_"
-	}
-	return routeInfoPfx
+func GetVisitor(name string) (v Visitor, found bool) {
+	v, found = registry[name]
+	return
 }
