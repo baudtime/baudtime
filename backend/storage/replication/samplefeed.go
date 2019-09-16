@@ -34,7 +34,7 @@ import (
 
 type sampleFeed struct {
 	h           *handOff
-	hmu         sync.RWMutex
+	hmu         sync.Mutex
 	flushing    uint32
 	closed      uint32
 	createdTime int64
@@ -85,10 +85,6 @@ func (feed *sampleFeed) FlushIfNeeded() {
 	var toFlush *handOff
 
 	feed.hmu.Lock()
-	if feed.h.cErr != nil {
-		feed.h.reconnect()
-	}
-
 	if feed.h.Buffered() > 0 {
 		toFlush = feed.h
 		feed.h = &handOff{
@@ -105,6 +101,12 @@ func (feed *sampleFeed) FlushIfNeeded() {
 		defer atomic.StoreUint32(&feed.flushing, 0)
 
 		var err error
+
+		if toFlush.cErr != nil {
+			err = toFlush.reconnect()
+			level.Warn(vars.Logger).Log("msg", "reconnect to slave")
+		}
+
 		batchSize := int64(os.Getpagesize())
 
 		for err == nil && toFlush.Buffered() > 0 {
@@ -262,7 +264,7 @@ func (h *handOff) reconnect() error {
 
 	h.cErr = nil
 	h.Conn = conn
-	level.Warn(vars.Logger).Log("msg", "reconnect to slave")
+
 	return nil
 }
 
