@@ -29,9 +29,9 @@ import (
 	"github.com/baudtime/baudtime/tcp"
 	"github.com/baudtime/baudtime/tcp/client"
 	"github.com/baudtime/baudtime/vars"
-	"github.com/hashicorp/go-multierror"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 )
 
 type Client interface {
@@ -227,7 +227,7 @@ func (c *ShardClient) Close() error {
 	if master != nil {
 		err := defaultFactory.destroy(master.Addr())
 		if err != nil {
-			multiErr = multierror.Append(multiErr, err)
+			multiErr = multierr.Append(multiErr, err)
 		}
 	}
 
@@ -236,7 +236,7 @@ func (c *ShardClient) Close() error {
 		for _, slave := range slaves {
 			err := defaultFactory.destroy(slave.Addr())
 			if err != nil {
-				multiErr = multierror.Append(multiErr, err)
+				multiErr = multierr.Append(multiErr, err)
 			}
 		}
 	}

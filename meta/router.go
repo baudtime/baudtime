@@ -19,9 +19,9 @@ import (
 	"github.com/baudtime/baudtime/msg"
 	"github.com/baudtime/baudtime/vars"
 	"github.com/cespare/xxhash"
-	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"go.uber.org/multierr"
 	"time"
 )
 
@@ -89,7 +89,7 @@ func (r *router) GetShardIDsByTimeSpan(from, to time.Time, matchers ...*labels.M
 
 	for t := from; t.Before(to); t = t.Add(24 * time.Hour) {
 		if ids, err := r.GetShardIDsByTime(t, matchers...); err != nil {
-			multiErr = multierror.Append(multiErr, err)
+			multiErr = multierr.Append(multiErr, err)
 		} else {
 			for _, id := range ids {
 				idSet[id] = struct{}{}
@@ -98,7 +98,7 @@ func (r *router) GetShardIDsByTimeSpan(from, to time.Time, matchers ...*labels.M
 	}
 
 	if ids, err := r.GetShardIDsByTime(to, matchers...); err != nil {
-		multiErr = multierror.Append(multiErr, err)
+		multiErr = multierr.Append(multiErr, err)
 	} else {
 		for _, id := range ids {
 			idSet[id] = struct{}{}

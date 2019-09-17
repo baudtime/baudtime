@@ -29,12 +29,12 @@ import (
 	gatewaymsg "github.com/baudtime/baudtime/msg/gateway"
 	"github.com/baudtime/baudtime/promql"
 	"github.com/baudtime/baudtime/util"
-	"github.com/hashicorp/go-multierror"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	lb "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/valyala/fasthttp"
+	"go.uber.org/multierr"
 )
 
 type queryResult struct {
@@ -103,13 +103,13 @@ func (gateway *Gateway) Ingest(request *gatewaymsg.AddRequest) error {
 
 		for _, p := range series.Points {
 			if er := appender.Add(series.Labels, p.T, p.V, hash); er != nil {
-				err = multierror.Append(err, er)
+				err = multierr.Append(err, er)
 			}
 		}
 	}
 
 	if er := appender.Flush(); er != nil {
-		err = multierror.Append(err, er)
+		err = multierr.Append(err, er)
 	}
 
 	gateway.appenderPool.Put(appender)

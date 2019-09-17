@@ -26,9 +26,9 @@ import (
 )
 
 type Conn struct {
-	reader *bufio.Reader
-	writer *bufio.Writer
-	*net.TCPConn
+	*bufio.Reader
+	*bufio.Writer
+	raw  *net.TCPConn
 	rBuf []byte
 	wBuf []byte
 }
@@ -45,11 +45,11 @@ func NewConn(c *net.TCPConn) *Conn {
 		f:  f,
 	}
 	return &Conn{
-		reader:  bufio.NewReaderSize(rw, 1e5), // We make a buffered reader & writer to reduce syscalls.
-		writer:  bufio.NewWriterSize(rw, 1e4),
-		TCPConn: c,
-		rBuf:    make([]byte, 4),
-		wBuf:    make([]byte, 4),
+		Reader: bufio.NewReaderSize(rw, 1e5), // We make a buffered Reader & Writer to reduce syscalls.
+		Writer: bufio.NewWriterSize(rw, 1e4),
+		raw:    c,
+		rBuf:   make([]byte, 4),
+		wBuf:   make([]byte, 4),
 	}
 }
 
@@ -72,7 +72,7 @@ func Connect(address string) (*Conn, error) {
 }
 
 func (c *Conn) ReadMsg(buf []byte) (int, error) {
-	_, err := io.ReadFull(c.reader, c.rBuf)
+	_, err := io.ReadFull(c.Reader, c.rBuf)
 	if err != nil {
 		return 0, err
 	}
@@ -83,7 +83,7 @@ func (c *Conn) ReadMsg(buf []byte) (int, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 
-	_, err = io.ReadFull(c.reader, buf[:msgLen])
+	_, err = io.ReadFull(c.Reader, buf[:msgLen])
 	if err != nil {
 		return 0, err
 	}
@@ -95,17 +95,27 @@ func (c *Conn) WriteMsg(msg []byte) error {
 	binary.BigEndian.PutUint32(c.wBuf[:4], uint32(len(msg)))
 
 	//write message length
-	_, err := c.writer.Write(c.wBuf[:4])
+	_, err := c.Writer.Write(c.wBuf[:4])
 	if err != nil {
 		return err
 	}
 
-	_, err = c.writer.Write(msg)
+	_, err = c.Writer.Write(msg)
 	return err
 }
 
-func (c *Conn) Flush() error {
-	return c.writer.Flush()
+func (c *Conn) CloseRead() error {
+	return c.raw.CloseRead()
+}
+
+func (c *Conn) CloseWrite() error {
+	c.Writer.Flush()
+	return c.raw.CloseWrite()
+}
+
+func (c *Conn) Close() error {
+	c.Writer.Flush()
+	return c.raw.Close()
 }
 
 type readWriter struct {

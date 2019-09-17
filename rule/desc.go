@@ -3,9 +3,9 @@ package rule
 import (
 	"github.com/baudtime/baudtime/promql"
 	"github.com/baudtime/baudtime/util/toml"
-	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
+	"go.uber.org/multierr"
 )
 
 // descErr represents semantical errors on parsing rule groups.
@@ -30,11 +30,11 @@ func (descs *RuleGroupDescs) Validate() (err error) {
 
 	for _, g := range descs.GroupDescs {
 		if g.Name == "" {
-			err = multierror.Append(err, errors.Errorf("group name should not be empty"))
+			err = multierr.Append(err, errors.Errorf("group name should not be empty"))
 		}
 
 		if _, ok := set[g.Name]; ok {
-			err = multierror.Append(err, errors.Errorf("group name: \"%s\" is repeated in the same file", g.Name))
+			err = multierr.Append(err, errors.Errorf("group name: \"%s\" is repeated in the same file", g.Name))
 		}
 
 		set[g.Name] = struct{}{}
@@ -42,7 +42,7 @@ func (descs *RuleGroupDescs) Validate() (err error) {
 		for i, r := range g.Rules {
 			for _, err := range r.Validate() {
 				ruleName := r.Record
-				err = multierror.Append(err, &descErr{
+				err = multierr.Append(err, &descErr{
 					Group:    g.Name,
 					Rule:     i,
 					RuleName: ruleName,

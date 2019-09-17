@@ -16,7 +16,7 @@
 package client
 
 import (
-	"github.com/hashicorp/go-multierror"
+	"go.uber.org/multierr"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -77,7 +77,7 @@ func (pool *ServiceConnPool) Close() error {
 	pool.conns.Range(func(key, value interface{}) bool {
 		err := value.(*Conn).close()
 		if err != nil {
-			multiErr = multierror.Append(multiErr, err)
+			multiErr = multierr.Append(multiErr, err)
 		}
 		return true
 	})
@@ -136,7 +136,7 @@ func (pool *HostConnPool) Close() error {
 	for _, c := range pool.conns {
 		if c != nil && !c.isClosed() {
 			if err := c.close(); err != nil {
-				multiErr = multierror.Append(multiErr, err)
+				multiErr = multierr.Append(multiErr, err)
 			}
 		}
 	}

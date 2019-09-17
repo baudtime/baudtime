@@ -26,10 +26,10 @@ import (
 	"github.com/baudtime/baudtime/msg"
 	"github.com/baudtime/baudtime/util/time"
 	"github.com/baudtime/baudtime/vars"
-	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
+	"go.uber.org/multierr"
 )
 
 type Fanout struct {
@@ -191,7 +191,7 @@ func (q *mergeQuerier) Select(params *SelectParams, matchers ...*labels.Matcher)
 			set, err := q.Select(params, matchers...)
 			if err != nil {
 				mtx.Lock()
-				multiErr = multierror.Append(multiErr, err)
+				multiErr = multierr.Append(multiErr, err)
 				mtx.Unlock()
 				return
 			}
@@ -224,7 +224,7 @@ func (q *mergeQuerier) LabelValues(name string, matchers ...*labels.Matcher) ([]
 
 			mtx.Lock()
 			if err != nil {
-				multiErr = multierror.Append(multiErr, err)
+				multiErr = multierr.Append(multiErr, err)
 			} else {
 				results = append(results, values)
 			}
@@ -524,7 +524,7 @@ func (fanoutApp *fanoutAppender) Flush() error {
 	var multiErr error
 	for _, app := range fanoutApp.appenders {
 		if err := app.Flush(); err != nil {
-			multiErr = multierror.Append(multiErr, err)
+			multiErr = multierr.Append(multiErr, err)
 		}
 	}
 	return multiErr

@@ -16,11 +16,12 @@
 package visitor
 
 import (
-	"github.com/baudtime/baudtime/meta"
-	"github.com/baudtime/baudtime/msg"
-	"github.com/hashicorp/go-multierror"
 	"math/rand"
 	"time"
+
+	"github.com/baudtime/baudtime/meta"
+	"github.com/baudtime/baudtime/msg"
+	"go.uber.org/multierr"
 )
 
 var random = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -35,14 +36,14 @@ func randomVisit(shard *meta.Shard, op func(node *meta.Node) (resp msg.Message, 
 	i := random.Intn(len(shard.Slaves) + 1)
 	if i > 0 {
 		if resp, err = op(shard.Slaves[i-1]); err != nil {
-			multiErr = multierror.Append(multiErr, err)
+			multiErr = multierr.Append(multiErr, err)
 		} else {
 			return
 		}
 	} else {
 		if shard.Master != nil {
 			if resp, err = op(shard.Master); err != nil {
-				multiErr = multierror.Append(multiErr, err)
+				multiErr = multierr.Append(multiErr, err)
 			} else {
 				return
 			}

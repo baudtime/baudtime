@@ -18,8 +18,8 @@ package visitor
 import (
 	"github.com/baudtime/baudtime/meta"
 	"github.com/baudtime/baudtime/msg"
-	"github.com/hashicorp/go-multierror"
 	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 )
 
 func init() {
@@ -31,7 +31,7 @@ func masterFirst(shard *meta.Shard, op func(node *meta.Node) (resp msg.Message, 
 
 	if shard.Master != nil {
 		if resp, err = op(shard.Master); err != nil {
-			multiErr = multierror.Append(multiErr, err)
+			multiErr = multierr.Append(multiErr, err)
 		} else {
 			return
 		}
@@ -42,7 +42,7 @@ func masterFirst(shard *meta.Shard, op func(node *meta.Node) (resp msg.Message, 
 	if len(shard.Slaves) > 0 {
 		for _, node := range shard.Slaves {
 			if resp, err = op(node); err != nil {
-				multiErr = multierror.Append(multiErr, err)
+				multiErr = multierr.Append(multiErr, err)
 			} else {
 				return
 			}

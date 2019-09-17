@@ -18,7 +18,6 @@ package replication
 import (
 	"encoding/binary"
 	"io"
-	"net"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -139,7 +138,7 @@ type handOff struct {
 	size     int64
 	addr     string
 	cErr     error
-	net.Conn
+	*tcp.Conn
 	bytesWriten   uint64
 	bytesBuffered uint64
 }
@@ -254,12 +253,16 @@ func (h *handOff) reconnect() error {
 
 	err = conn.WriteMsg(buf[:n])
 	if err != nil {
-		err = conn.WriteMsg(buf[:n])
-		if err != nil {
-			h.cErr = err
-			return err
-		}
+		h.cErr = err
+		return err
 	}
+
+	err = conn.Flush()
+	if err != nil {
+		h.cErr = err
+		return err
+	}
+
 	conn.CloseRead()
 
 	h.cErr = nil

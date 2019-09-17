@@ -8,7 +8,6 @@ require (
 	github.com/cespare/xxhash v1.1.0
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/go-kit/kit v0.9.0
-	github.com/hashicorp/go-multierror v1.0.0
 	github.com/influxdata/influxdb1-client v0.0.0-20190809212627-fc22c7df067e
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/peterh/liner v1.1.0
@@ -26,6 +25,7 @@ require (
 	github.com/uber/jaeger-lib v2.0.0+incompatible // indirect
 	github.com/valyala/fasthttp v1.4.0
 	go.etcd.io/etcd v0.0.0-20190830150955-898bd1351fcf
+	go.uber.org/multierr v1.1.0
 	golang.org/x/text v0.3.0
 	google.golang.org/grpc v1.23.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0

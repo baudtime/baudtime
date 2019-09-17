@@ -17,6 +17,11 @@ package storage
 
 import (
 	"bytes"
+	"math"
+	"reflect"
+	"strings"
+	"sync/atomic"
+
 	"github.com/baudtime/baudtime/backend/storage/replication"
 	"github.com/baudtime/baudtime/meta"
 	"github.com/baudtime/baudtime/msg"
@@ -24,17 +29,13 @@ import (
 	"github.com/baudtime/baudtime/util/syn"
 	tm "github.com/baudtime/baudtime/util/time"
 	"github.com/baudtime/baudtime/vars"
-	"github.com/hashicorp/go-multierror"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/value"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
 	"github.com/shirou/gopsutil/disk"
-	"math"
-	"reflect"
-	"strings"
-	"sync/atomic"
+	"go.uber.org/multierr"
 )
 
 func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, tIt *tm.TimestampIter) ([]*msg.Series, error) {
@@ -287,7 +288,7 @@ func (storage *Storage) HandleLabelValuesReq(request *backendmsg.LabelValuesRequ
 }
 
 func (storage *Storage) Close() error {
-	return multierror.Append(storage.ReplicateManager.Close(), storage.DB.Close())
+	return multierr.Append(storage.ReplicateManager.Close(), storage.DB.Close())
 }
 
 func (storage *Storage) Info(detailed bool) (Stat, error) {
@@ -397,14 +398,14 @@ func (addReqHandler *AddReqHandler) HandleAddReq(request *backendmsg.AddRequest)
 				case tsdb.ErrOutOfBounds:
 					atomic.AddUint64(&addReqHandler.addStat.OutOfBounds, 1)
 				default:
-					multiErr = multierror.Append(multiErr, err)
+					multiErr = multierr.Append(multiErr, err)
 				}
 			}
 		}
 	}
 
 	if err := app.Commit(); err != nil {
-		multiErr = multierror.Append(multiErr, err)
+		multiErr = multierr.Append(multiErr, err)
 	}
 
 	return multiErr
