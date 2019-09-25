@@ -35,6 +35,8 @@ import (
 	lb "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/multierr"
+
+	tm "github.com/baudtime/baudtime/util/time"
 )
 
 type queryResult struct {
@@ -77,7 +79,7 @@ func (gateway *Gateway) RangeQuery(request *gatewaymsg.RangeQueryRequest) *gatew
 }
 
 func (gateway *Gateway) LabelValues(request *gatewaymsg.LabelValuesRequest) *msg.LabelValuesResponse {
-	values, err := gateway.labelValues(request.Name, request.Constraint, request.Timeout)
+	values, err := gateway.labelValues(request.Start, request.End, request.Name, request.Constraint, request.Timeout)
 	if err != nil {
 		return &msg.LabelValuesResponse{Status: msg.StatusCode_Failed, ErrorMsg: err.Error()}
 	}
@@ -172,12 +174,21 @@ func (gateway *Gateway) HttpRangeQuery(c *fasthttp.RequestCtx) {
 
 func (gateway *Gateway) HttpLabelValues(c *fasthttp.RequestCtx) {
 	exeHttpQuery(c, func() (interface{}, error) {
+		var start, end, constraint, timeout string
+
+		if arg := c.QueryArgs().Peek("start"); arg != nil {
+			start = string(arg)
+		}
+
+		if arg := c.QueryArgs().Peek("end"); arg != nil {
+			end = string(arg)
+		}
+
 		name, ok := c.UserValue("name").(string)
 		if !ok {
 			return nil, errors.New("label name must be provided")
 		}
 
-		var constraint, timeout string
 		if arg := c.QueryArgs().Peek("constraint"); arg != nil {
 			constraint = string(arg)
 		}
@@ -186,7 +197,7 @@ func (gateway *Gateway) HttpLabelValues(c *fasthttp.RequestCtx) {
 			timeout = string(arg)
 		}
 
-		return gateway.labelValues(name, constraint, timeout)
+		return gateway.labelValues(start, end, name, constraint, timeout)
 	})
 }
 
@@ -313,9 +324,27 @@ func (gateway *Gateway) rangeQuery(startT, endT, step, timeout, query string) (*
 	}, nil
 }
 
-func (gateway *Gateway) labelValues(name, constraint, timeout string) ([]string, error) {
+func (gateway *Gateway) labelValues(startT, endT, name, constraint, timeout string) ([]string, error) {
 	span := opentracing.StartSpan("labelValues", opentracing.Tag{"name", name}, opentracing.Tag{"constraint", constraint})
 	defer span.Finish()
+
+	var mint int64 = math.MinInt64
+	if startT != "" {
+		t, err := ParseTime(startT)
+		if err != nil {
+			return nil, err
+		}
+		mint = tm.FromTime(t)
+	}
+
+	var maxt int64 = math.MaxInt64
+	if endT != "" {
+		t, err := ParseTime(endT)
+		if err != nil {
+			return nil, err
+		}
+		maxt = tm.FromTime(t)
+	}
 
 	if !model.LabelNameRE.MatchString(name) {
 		return nil, errors.Errorf("invalid label name: %q", name)
@@ -342,7 +371,7 @@ func (gateway *Gateway) labelValues(name, constraint, timeout string) ([]string,
 		defer cancel()
 	}
 
-	q, err := gateway.Backend.Querier(ctx, math.MinInt64, math.MaxInt64)
+	q, err := gateway.Backend.Querier(ctx, mint, maxt)
 	if err != nil {
 		return nil, err
 	}

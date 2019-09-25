@@ -26,14 +26,14 @@ import (
 	"time"
 )
 
-func send_gateway() {
+func sendGateway() {
 	addrProvider := client.NewStaticAddrProvider("localhost:8088")
 	cli := client.NewGatewayClient("name", addrProvider)
 
 	var t int64
 
 	s := make([]*msg.Series, 10)
-	r := &gateway.AddRequest{s}
+	r := &gateway.AddRequest{Series: s}
 
 	for j := 0; j < 10000; j++ {
 		for i := 0; i < 10; i++ {
@@ -76,7 +76,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			send_gateway()
+			sendGateway()
 		}()
 	}
 

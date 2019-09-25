@@ -3,9 +3,10 @@ tcp_port = "8088"
 http_port = "80"
 max_conn = 10000
 namespace = "n1"
+lookback_delta = "5s"
 
-[etcd_common]
-  endpoints = ["11.24.102.245:2379", "11.24.102.246:2379", "11.24.17.250:2379"]
+[etcd]
+  endpoints = ["localhost:2379"]
   dial_timeout = "5s"
   rw_timeout = "15s"
   retry_num = 2
@@ -25,6 +26,6 @@ namespace = "n1"
 
 [jaeger]
   sampler_type = "ratelimiting"
-  sample_num_per_sec = 10
+  sample_num_per_sec = 10000
   agent_host_port = ""
   collector_endpoint = "http://xx.xx.com/api/traces"

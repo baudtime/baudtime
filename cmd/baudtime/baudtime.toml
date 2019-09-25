@@ -1,10 +1,12 @@
+# let the baudtime run as the roles of both gateway and backend
 tcp_port = "8088"
 http_port = "80"
 max_conn = 10000
 namespace = "n1"
+lookback_delta = "5s"
 
-[etcd_common]
-  endpoints = ["11.24.102.245:2379", "11.24.102.246:2379", "11.24.17.250:2379"]
+[etcd]
+  endpoints = ["localhost:2379"]
   dial_timeout = "5s"
   rw_timeout = "15s"
   retry_num = 2
@@ -25,7 +27,6 @@ namespace = "n1"
 [storage]
   [storage.tsdb]
     path = "/tmp/tsdb"
-    lookback_delta = "5s"
     retention_duration = "360h"
     block_ranges = [1800000, 3600000, 14400000, 28800000, 86400000]
     enable_wal = false

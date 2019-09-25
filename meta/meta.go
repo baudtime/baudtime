@@ -193,8 +193,8 @@ func (m *meta) watch() {
 		defer atomic.StoreUint32(&m.watching, 0)
 
 		cli, err := clientv3.New(clientv3.Config{
-			Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
-			DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
+			Endpoints:   vars.Cfg.Etcd.Endpoints,
+			DialTimeout: time.Duration(vars.Cfg.Etcd.DialTimeout),
 		})
 		if err != nil {
 			level.Error(vars.Logger).Log("msg", "failed to connect to etcd", "err", err)

@@ -163,8 +163,8 @@ func (h *Heartbeat) Start() error {
 	}
 
 	cli, err := clientv3.New(clientv3.Config{
-		Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
-		DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
+		Endpoints:   vars.Cfg.Etcd.Endpoints,
+		DialTimeout: time.Duration(vars.Cfg.Etcd.DialTimeout),
 	})
 	if err != nil {
 		return errors.Wrap(err, "can't init heartbeat etcd client")
@@ -207,8 +207,8 @@ func (h *Heartbeat) Stop() {
 	h.wg.Wait()
 
 	if h.client != nil {
-		redo.Retry(time.Duration(vars.Cfg.EtcdCommon.RetryInterval), vars.Cfg.EtcdCommon.RetryNum, func() (bool, error) {
-			ctx, cancel := context.WithTimeout(h.client.Ctx(), time.Duration(vars.Cfg.EtcdCommon.RWTimeout))
+		redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
+			ctx, cancel := context.WithTimeout(h.client.Ctx(), time.Duration(vars.Cfg.Etcd.RWTimeout))
 			_, err := h.client.Delete(ctx, nodePrefix()+h.lastNodeInfo.Addr())
 			cancel()
 			if err != nil {
@@ -226,8 +226,8 @@ func (h *Heartbeat) keepLease() {
 	reConnect, reGrant := false, false
 
 	clientCfg := clientv3.Config{
-		Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
-		DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
+		Endpoints:   vars.Cfg.Etcd.Endpoints,
+		DialTimeout: time.Duration(vars.Cfg.Etcd.DialTimeout),
 	}
 
 	for {
@@ -313,8 +313,8 @@ func (h *Heartbeat) reportInfo(node Node) error {
 
 	h.cmtx.RLock()
 	if h.client != nil && h.leaseID != clientv3.NoLease {
-		err = redo.Retry(time.Duration(vars.Cfg.EtcdCommon.RetryInterval), vars.Cfg.EtcdCommon.RetryNum, func() (bool, error) {
-			ctx, cancel := context.WithTimeout(h.client.Ctx(), time.Duration(vars.Cfg.EtcdCommon.RWTimeout))
+		err = redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
+			ctx, cancel := context.WithTimeout(h.client.Ctx(), time.Duration(vars.Cfg.Etcd.RWTimeout))
 			_, er := h.client.Put(ctx, nodePrefix()+node.Addr(), string(b), clientv3.WithLease(h.leaseID))
 			cancel()
 			if er != nil {

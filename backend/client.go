@@ -18,7 +18,10 @@ package backend
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
+	"github.com/baudtime/baudtime/util/syn"
+	"reflect"
 	"sync"
 
 	"github.com/baudtime/baudtime/backend/storage"
@@ -67,12 +70,18 @@ func (factory *clientFactory) destroy(address string) (err error) {
 	return
 }
 
-var defaultFactory clientFactory
+var (
+	defaultFactory clientFactory
+	bytesPool      = syn.NewBucketizedPool(1e3, 1e7, 4, false, func(s int) interface{} { return make([]byte, s) }, func() syn.Bucket {
+		return new(sync.Pool)
+	})
+)
 
 type ShardClient struct {
 	shardID      string
 	localStorage *storage.Storage
 	exeQuery     visitor.Visitor
+	codec        tcp.MsgCodec
 }
 
 func (c *ShardClient) Select(ctx context.Context, req *backendmsg.SelectRequest) (*backendmsg.SelectResponse, error) {
@@ -112,22 +121,19 @@ func (c *ShardClient) Select(ctx context.Context, req *backendmsg.SelectRequest)
 				return nil, err
 			}
 
-			resp, err := cli.SyncRequest(ctx, req)
-			if err != nil {
-				return nil, err
-			}
-
-			if _, ok := resp.(*backendmsg.SelectResponse); !ok {
-				return nil, tcp.BadMsgTypeError
-			}
-			return resp, nil
+			return cli.SyncRequest(ctx, req)
 		}
 	})
 
 	if err != nil {
 		return nil, err
 	}
-	return resp.(*backendmsg.SelectResponse), nil
+
+	if selResp, ok := resp.(*backendmsg.SelectResponse); !ok {
+		return nil, errors.Wrapf(tcp.BadMsgTypeError, "the type of response is '%v'", reflect.TypeOf(resp))
+	} else {
+		return selResp, nil
+	}
 }
 
 func (c *ShardClient) LabelValues(ctx context.Context, req *backendmsg.LabelValuesRequest) (*msg.LabelValuesResponse, error) {
@@ -165,21 +171,19 @@ func (c *ShardClient) LabelValues(ctx context.Context, req *backendmsg.LabelValu
 				return nil, err
 			}
 
-			resp, err := cli.SyncRequest(ctx, req)
-			if err != nil {
-				return nil, err
-			}
-
-			if _, ok := resp.(*msg.LabelValuesResponse); !ok {
-				return nil, tcp.BadMsgTypeError
-			}
-			return resp, nil
+			return cli.SyncRequest(ctx, req)
 		}
 	})
+
 	if err != nil {
 		return nil, err
 	}
-	return resp.(*msg.LabelValuesResponse), nil
+
+	if lValsResp, ok := resp.(*msg.LabelValuesResponse); !ok {
+		return nil, errors.Wrapf(tcp.BadMsgTypeError, "the type of response is '%v'", reflect.TypeOf(resp))
+	} else {
+		return lValsResp, nil
+	}
 }
 
 func (c *ShardClient) Add(ctx context.Context, req *backendmsg.AddRequest) (err error) {
@@ -190,7 +194,23 @@ func (c *ShardClient) Add(ctx context.Context, req *backendmsg.AddRequest) (err 
 	master := meta.GetMaster(c.shardID)
 	if master != nil {
 		if c.localStorage != nil && master.IP == vars.LocalIP && master.Port == vars.Cfg.TcpPort {
-			return c.localStorage.HandleAddReq(req)
+			err = c.localStorage.HandleAddReq(req)
+			if err != nil {
+				return
+			}
+
+			bytes := bytesPool.Get(1 + binary.MaxVarintLen64 + req.Msgsize()).([]byte)
+
+			var n int
+			n, err = c.codec.Encode(tcp.Message{Message: req}, bytes)
+			if err != nil {
+				bytesPool.Put(bytes)
+				return
+			}
+
+			c.localStorage.ReplicateManager.HandleWriteReq(bytes[:n])
+			bytesPool.Put(bytes)
+			return
 		}
 
 		var cli *client.Client
@@ -217,7 +237,7 @@ func (c *ShardClient) Add(ctx context.Context, req *backendmsg.AddRequest) (err 
 	}
 
 	meta.FailoverIfNeeded(c.shardID)
-	return errors.Errorf("master not found, may be down? shard id: %s", c.shardID)
+	return errors.Wrapf(err, "master not found, may be down? shard id: %s", c.shardID)
 }
 
 func (c *ShardClient) Close() error {

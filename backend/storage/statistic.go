@@ -20,20 +20,40 @@ import (
 	"github.com/baudtime/baudtime/util"
 	tm "github.com/baudtime/baudtime/util/time"
 	"strconv"
+	"sync/atomic"
 	"time"
 )
 
-type AddStat struct {
-	Received    uint64
-	Succeed     uint64
-	Failed      uint64
-	OutOfOrder  uint64
-	AmendSample uint64
-	OutOfBounds uint64
+type OPStat struct {
+	SucceedSel   uint64
+	FailedSel    uint64
+	SucceedLVals uint64
+	FailedLVals  uint64
+	ReceivedAdd  uint64
+	SucceedAdd   uint64
+	FailedAdd    uint64
+	OutOfOrder   uint64
+	AmendSample  uint64
+	OutOfBounds  uint64
+	FailedCommit uint64
 }
 
-type DbStat struct {
-	AddStats             AddStat
+func (stat *OPStat) Reset() {
+	atomic.StoreUint64(&stat.SucceedSel, 0)
+	atomic.StoreUint64(&stat.FailedSel, 0)
+	atomic.StoreUint64(&stat.SucceedLVals, 0)
+	atomic.StoreUint64(&stat.FailedLVals, 0)
+	atomic.StoreUint64(&stat.ReceivedAdd, 0)
+	atomic.StoreUint64(&stat.SucceedAdd, 0)
+	atomic.StoreUint64(&stat.FailedAdd, 0)
+	atomic.StoreUint64(&stat.OutOfOrder, 0)
+	atomic.StoreUint64(&stat.AmendSample, 0)
+	atomic.StoreUint64(&stat.OutOfBounds, 0)
+	atomic.StoreUint64(&stat.FailedCommit, 0)
+}
+
+type DBStat struct {
+	OpStat               OPStat
 	SeriesNum            uint64
 	BlockNum             int
 	HeadMinTime          int64
@@ -46,7 +66,7 @@ type DbStat struct {
 
 type Stat struct {
 	meta.Node
-	*DbStat `json:"omitempty"`
+	*DBStat `json:"omitempty"`
 }
 
 func (stat Stat) String() string {
@@ -64,13 +84,18 @@ func (stat Stat) String() string {
 		buf = append(append(append(buf, "MasterPort: "...), stat.Node.MasterPort...), lnBreak)
 	}
 
-	if stat.DbStat != nil {
-		buf = append(append(append(buf, "Received: "...), strconv.FormatUint(stat.AddStats.Received, 10)...), lnBreak)
-		buf = append(append(append(buf, "Succeed: "...), strconv.FormatUint(stat.AddStats.Succeed, 10)...), lnBreak)
-		buf = append(append(append(buf, "Failed: "...), strconv.FormatUint(stat.AddStats.Failed, 10)...), lnBreak)
-		buf = append(append(append(buf, "OutOfOrder: "...), strconv.FormatUint(stat.AddStats.OutOfOrder, 10)...), lnBreak)
-		buf = append(append(append(buf, "AmendSample: "...), strconv.FormatUint(stat.AddStats.AmendSample, 10)...), lnBreak)
-		buf = append(append(append(buf, "OutOfBounds: "...), strconv.FormatUint(stat.AddStats.OutOfBounds, 10)...), lnBreak)
+	if stat.DBStat != nil {
+		buf = append(append(append(buf, "SucceedSel: "...), strconv.FormatUint(stat.OpStat.SucceedSel, 10)...), lnBreak)
+		buf = append(append(append(buf, "FailedSel: "...), strconv.FormatUint(stat.OpStat.FailedSel, 10)...), lnBreak)
+		buf = append(append(append(buf, "SucceedLVals: "...), strconv.FormatUint(stat.OpStat.SucceedLVals, 10)...), lnBreak)
+		buf = append(append(append(buf, "FailedLVals: "...), strconv.FormatUint(stat.OpStat.FailedLVals, 10)...), lnBreak)
+		buf = append(append(append(buf, "ReceivedAdd: "...), strconv.FormatUint(stat.OpStat.ReceivedAdd, 10)...), lnBreak)
+		buf = append(append(append(buf, "SucceedAdd: "...), strconv.FormatUint(stat.OpStat.SucceedAdd, 10)...), lnBreak)
+		buf = append(append(append(buf, "FailedAdd: "...), strconv.FormatUint(stat.OpStat.FailedAdd, 10)...), lnBreak)
+		buf = append(append(append(buf, "OutOfOrder: "...), strconv.FormatUint(stat.OpStat.OutOfOrder, 10)...), lnBreak)
+		buf = append(append(append(buf, "AmendSample: "...), strconv.FormatUint(stat.OpStat.AmendSample, 10)...), lnBreak)
+		buf = append(append(append(buf, "OutOfBounds: "...), strconv.FormatUint(stat.OpStat.OutOfBounds, 10)...), lnBreak)
+		buf = append(append(append(buf, "FailedCommit: "...), strconv.FormatUint(stat.OpStat.FailedCommit, 10)...), lnBreak)
 		buf = append(append(append(buf, "SeriesNum: "...), strconv.FormatUint(stat.SeriesNum, 10)...), lnBreak)
 		buf = append(append(append(buf, "BlockNum: "...), strconv.Itoa(stat.BlockNum)...), lnBreak)
 		buf = append(append(append(buf, "HeadMinTime: "...), tsToString(stat.HeadMinTime)...), lnBreak)

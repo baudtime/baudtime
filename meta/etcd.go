@@ -42,8 +42,8 @@ func (r *ClientRefer) Ref() (*clientv3.Client, error) {
 
 	if r.cli == nil {
 		cli, err := clientv3.New(clientv3.Config{
-			Endpoints:   vars.Cfg.EtcdCommon.Endpoints,
-			DialTimeout: time.Duration(vars.Cfg.EtcdCommon.DialTimeout),
+			Endpoints:   vars.Cfg.Etcd.Endpoints,
+			DialTimeout: time.Duration(vars.Cfg.Etcd.DialTimeout),
 			DialOptions: []grpc.DialOption{grpc.WithBlock()},
 		})
 		if err != nil {
@@ -75,14 +75,14 @@ var (
 func exist(k string) (bool, error) {
 	var resp *clientv3.GetResponse
 
-	er := redo.Retry(time.Duration(vars.Cfg.EtcdCommon.RetryInterval), vars.Cfg.EtcdCommon.RetryNum, func() (bool, error) {
+	er := redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 		cli, err := clientRef.Ref()
 		if err != nil {
 			return true, err
 		}
 		defer clientRef.UnRef()
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(2*vars.Cfg.EtcdCommon.RWTimeout))
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(2*vars.Cfg.Etcd.RWTimeout))
 
 		resp, err = cli.Get(ctx, k)
 		cancel()
@@ -97,14 +97,14 @@ func exist(k string) (bool, error) {
 }
 
 func etcdGet(k string, v interface{}) error {
-	return redo.Retry(time.Duration(vars.Cfg.EtcdCommon.RetryInterval), vars.Cfg.EtcdCommon.RetryNum, func() (bool, error) {
+	return redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 		cli, err := clientRef.Ref()
 		if err != nil {
 			return true, err
 		}
 		defer clientRef.UnRef()
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.EtcdCommon.RWTimeout))
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.Etcd.RWTimeout))
 
 		resp, err := cli.Get(ctx, k)
 		cancel()
@@ -136,14 +136,14 @@ func etcdGet(k string, v interface{}) error {
 
 func etcdGetWithPrefix(prefix string) (*clientv3.GetResponse, error) {
 	var resp *clientv3.GetResponse
-	er := redo.Retry(time.Duration(vars.Cfg.EtcdCommon.RetryInterval), vars.Cfg.EtcdCommon.RetryNum, func() (bool, error) {
+	er := redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 		cli, err := clientRef.Ref()
 		if err != nil {
 			return true, err
 		}
 		defer clientRef.UnRef()
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.EtcdCommon.RWTimeout))
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.Etcd.RWTimeout))
 
 		resp, err = cli.Get(ctx, prefix, clientv3.WithPrefix())
 		cancel()
@@ -162,7 +162,7 @@ func etcdGetWithPrefix(prefix string) (*clientv3.GetResponse, error) {
 }
 
 func etcdPut(k string, v interface{}, leaseID clientv3.LeaseID) error {
-	return redo.Retry(time.Duration(vars.Cfg.EtcdCommon.RetryInterval), vars.Cfg.EtcdCommon.RetryNum, func() (bool, error) {
+	return redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 		var (
 			b   []byte
 			err error
@@ -181,7 +181,7 @@ func etcdPut(k string, v interface{}, leaseID clientv3.LeaseID) error {
 			var er error
 
 			cli := session.Client()
-			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.EtcdCommon.RWTimeout))
+			ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.Etcd.RWTimeout))
 
 			if leaseID == clientv3.NoLease {
 				_, er = cli.Put(ctx, k, string(b))
@@ -200,14 +200,14 @@ func etcdPut(k string, v interface{}, leaseID clientv3.LeaseID) error {
 }
 
 func etcdDel(k string) error {
-	return redo.Retry(time.Duration(vars.Cfg.EtcdCommon.RetryInterval), vars.Cfg.EtcdCommon.RetryNum, func() (bool, error) {
+	return redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 		cli, err := clientRef.Ref()
 		if err != nil {
 			return true, err
 		}
 		defer clientRef.UnRef()
 
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.EtcdCommon.RWTimeout))
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.Etcd.RWTimeout))
 
 		_, err = cli.Delete(ctx, k)
 		cancel()

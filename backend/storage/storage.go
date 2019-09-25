@@ -30,7 +30,6 @@ import (
 	tm "github.com/baudtime/baudtime/util/time"
 	"github.com/baudtime/baudtime/vars"
 	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/value"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/labels"
@@ -58,7 +57,7 @@ func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, tIt *tm.Times
 		curSeries := set.At()
 
 		if pIt == nil {
-			pIt = NewBufferIterator(curSeries.Iterator(), tm.DurationMilliSec(vars.Cfg.Storage.TSDB.LookbackDelta))
+			pIt = NewBufferIterator(curSeries.Iterator(), tm.DurationMilliSec(vars.Cfg.LookbackDelta))
 		} else {
 			pIt.Reset(curSeries.Iterator())
 		}
@@ -82,7 +81,7 @@ func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, tIt *tm.Times
 
 			if !ok || t > ts {
 				t, v, ok = pIt.PeekBack(1)
-				if !ok || t < ts-tm.DurationMilliSec(vars.Cfg.Storage.TSDB.LookbackDelta) {
+				if !ok || t < ts-tm.DurationMilliSec(vars.Cfg.LookbackDelta) {
 					continue
 				}
 			}
@@ -167,17 +166,22 @@ type Storage struct {
 	*tsdb.DB
 	*AddReqHandler
 	ReplicateManager *replication.ReplicateManager
+	OpStat           *OPStat
 }
 
 func New(db *tsdb.DB) *Storage {
+	opStat := new(OPStat)
+
 	return &Storage{
 		DB: db,
 		AddReqHandler: &AddReqHandler{
 			appender: db.Appender,
+			opStat:   opStat,
 			symbolsK: syn.NewMap(1024),
 			symbolsV: syn.NewMap(1 << 15),
 		},
 		ReplicateManager: replication.NewReplicateManager(db),
+		OpStat:           opStat,
 	}
 }
 
@@ -193,15 +197,17 @@ func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *back
 	}
 	defer func() {
 		if queryResponse.Status == msg.StatusCode_Succeed {
+			atomic.AddUint64(&storage.opStat.SucceedSel, 1)
 			span.SetTag("seriesNum", len(queryResponse.Series))
 		} else {
+			atomic.AddUint64(&storage.opStat.FailedSel, 1)
 			span.SetTag("errorMsg", queryResponse.ErrorMsg)
 		}
 		span.Finish()
 	}()
 
 	if (request.Mint == request.Maxt && request.Interval == 0) || (request.Mint < request.Maxt && request.Interval > 0) {
-		q, err := storage.DB.Querier(request.Mint-tm.DurationMilliSec(vars.Cfg.Storage.TSDB.LookbackDelta), request.Maxt)
+		q, err := storage.DB.Querier(request.Mint-tm.DurationMilliSec(vars.Cfg.LookbackDelta), request.Maxt)
 		if err != nil {
 			queryResponse.ErrorMsg = err.Error()
 			return queryResponse
@@ -220,7 +226,7 @@ func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *back
 	}
 
 	if request.Mint < request.Maxt && request.Interval == 0 {
-		q, err := storage.DB.Querier(request.Mint-tm.DurationMilliSec(vars.Cfg.Storage.TSDB.LookbackDelta), request.Maxt)
+		q, err := storage.DB.Querier(request.Mint, request.Maxt)
 		if err != nil {
 			queryResponse.ErrorMsg = err.Error()
 			return queryResponse
@@ -254,14 +260,16 @@ func (storage *Storage) HandleLabelValuesReq(request *backendmsg.LabelValuesRequ
 	}
 	defer func() {
 		if queryResponse.Status == msg.StatusCode_Succeed {
+			atomic.AddUint64(&storage.opStat.SucceedLVals, 1)
 			span.SetTag("valuesNum", len(queryResponse.Values))
 		} else {
+			atomic.AddUint64(&storage.opStat.FailedLVals, 1)
 			span.SetTag("errorMsg", queryResponse.ErrorMsg)
 		}
 		span.Finish()
 	}()
 
-	q, err := storage.DB.Querier(math.MinInt64, math.MaxInt64)
+	q, err := storage.DB.Querier(request.Mint, request.Maxt)
 	if err != nil {
 		queryResponse.ErrorMsg = err.Error()
 		return queryResponse
@@ -288,7 +296,7 @@ func (storage *Storage) HandleLabelValuesReq(request *backendmsg.LabelValuesRequ
 }
 
 func (storage *Storage) Close() error {
-	return multierr.Append(storage.ReplicateManager.Close(), storage.DB.Close())
+	return multierr.Combine(storage.ReplicateManager.Close(), storage.DB.Close())
 }
 
 func (storage *Storage) Info(detailed bool) (Stat, error) {
@@ -329,8 +337,8 @@ func (storage *Storage) Info(detailed bool) (Stat, error) {
 		appMinValidTime = headMaxT - vars.Cfg.Storage.TSDB.BlockRanges[0]/2
 	}
 
-	stat.DbStat = &DbStat{
-		AddStats:             storage.addStat,
+	stat.DBStat = &DBStat{
+		OpStat:               *storage.OpStat,
 		SeriesNum:            storage.DB.Head().NumSeries(),
 		BlockNum:             len(storage.DB.Blocks()),
 		HeadMinTime:          headMinT,
@@ -346,7 +354,7 @@ func (storage *Storage) Info(detailed bool) (Stat, error) {
 
 type AddReqHandler struct {
 	appender func() tsdb.Appender
-	addStat  AddStat
+	opStat   *OPStat
 	symbolsK *syn.Map
 	symbolsV *syn.Map
 }
@@ -385,18 +393,18 @@ func (addReqHandler *AddReqHandler) HandleAddReq(request *backendmsg.AddRequest)
 				ref, err = app.Add(lset, p.T, p.V)
 			}
 
-			atomic.AddUint64(&addReqHandler.addStat.Received, 1)
+			atomic.AddUint64(&addReqHandler.opStat.ReceivedAdd, 1)
 			if err == nil {
-				atomic.AddUint64(&addReqHandler.addStat.Succeed, 1)
+				atomic.AddUint64(&addReqHandler.opStat.SucceedAdd, 1)
 			} else {
-				atomic.AddUint64(&addReqHandler.addStat.Failed, 1)
-				switch errors.Cause(err) {
+				atomic.AddUint64(&addReqHandler.opStat.FailedAdd, 1)
+				switch err {
 				case tsdb.ErrOutOfOrderSample:
-					atomic.AddUint64(&addReqHandler.addStat.OutOfOrder, 1)
+					atomic.AddUint64(&addReqHandler.opStat.OutOfOrder, 1)
 				case tsdb.ErrAmendSample:
-					atomic.AddUint64(&addReqHandler.addStat.AmendSample, 1)
+					atomic.AddUint64(&addReqHandler.opStat.AmendSample, 1)
 				case tsdb.ErrOutOfBounds:
-					atomic.AddUint64(&addReqHandler.addStat.OutOfBounds, 1)
+					atomic.AddUint64(&addReqHandler.opStat.OutOfBounds, 1)
 				default:
 					multiErr = multierr.Append(multiErr, err)
 				}
@@ -405,17 +413,9 @@ func (addReqHandler *AddReqHandler) HandleAddReq(request *backendmsg.AddRequest)
 	}
 
 	if err := app.Commit(); err != nil {
+		atomic.AddUint64(&addReqHandler.opStat.FailedCommit, 1)
 		multiErr = multierr.Append(multiErr, err)
 	}
 
 	return multiErr
-}
-
-func (addReqHandler *AddReqHandler) ResetStat() {
-	atomic.StoreUint64(&addReqHandler.addStat.Received, 0)
-	atomic.StoreUint64(&addReqHandler.addStat.Succeed, 0)
-	atomic.StoreUint64(&addReqHandler.addStat.Failed, 0)
-	atomic.StoreUint64(&addReqHandler.addStat.OutOfOrder, 0)
-	atomic.StoreUint64(&addReqHandler.addStat.AmendSample, 0)
-	atomic.StoreUint64(&addReqHandler.addStat.OutOfBounds, 0)
 }

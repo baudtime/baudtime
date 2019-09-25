@@ -109,15 +109,18 @@ func (q *fanoutQuerier) Select(params *SelectParams, matchers ...*labels.Matcher
 }
 
 func (q *fanoutQuerier) LabelValues(name string, matchers ...*labels.Matcher) ([]string, error) {
-	allShards := meta.AllShards()
+	shardIDs, err := meta.Router().GetShardIDsByTimeSpan(time.Time(q.mint), time.Time(q.maxt), matchers...)
+	if err != nil {
+		return nil, err
+	}
 
 	shardVisitor, found := visitor.GetVisitor(vars.Cfg.Gateway.QueryStrategy)
 	if !found {
 		return nil, errors.Errorf("query strategy %v not found", vars.Cfg.Gateway.QueryStrategy)
 	}
 
-	queriers := make([]Querier, 0, len(allShards))
-	for shardID := range allShards {
+	queriers := make([]Querier, 0, len(shardIDs))
+	for _, shardID := range shardIDs {
 		if shardID == "" {
 			continue
 		}
@@ -177,8 +180,7 @@ func NewMergeQuerier(queriers []Querier) Querier {
 // Select returns a set of series that matches the given label matchers.
 func (q *mergeQuerier) Select(params *SelectParams, matchers ...*labels.Matcher) (SeriesSet, error) {
 	var (
-		multiErr   error
-		mtx        sync.Mutex
+		errors     = make([]error, len(q.queriers))
 		seriesSets = make([]SeriesSet, len(q.queriers))
 		wg         sync.WaitGroup
 	)
@@ -188,17 +190,12 @@ func (q *mergeQuerier) Select(params *SelectParams, matchers ...*labels.Matcher)
 		go func(idx int, q Querier) {
 			defer wg.Done()
 
-			set, err := q.Select(params, matchers...)
-			if err != nil {
-				mtx.Lock()
-				multiErr = multierr.Append(multiErr, err)
-				mtx.Unlock()
-				return
-			}
-			seriesSets[idx] = set
+			seriesSets[idx], errors[idx] = q.Select(params, matchers...)
 		}(i, querier)
 	}
 	wg.Wait()
+
+	multiErr := multierr.Combine(errors...)
 
 	if multiErr != nil {
 		return nil, multiErr
@@ -209,35 +206,28 @@ func (q *mergeQuerier) Select(params *SelectParams, matchers ...*labels.Matcher)
 // LabelValues returns all potential values for a label name.
 func (q *mergeQuerier) LabelValues(name string, matchers ...*labels.Matcher) ([]string, error) {
 	var (
-		multiErr error
-		results  [][]string
-		mtx      sync.Mutex
-		wg       sync.WaitGroup
+		errors = make([]error, len(q.queriers))
+		values = make([][]string, len(q.queriers))
+		wg     sync.WaitGroup
 	)
 
-	for _, querier := range q.queriers {
+	for i, querier := range q.queriers {
 		wg.Add(1)
-		go func(q Querier) {
+		go func(idx int, q Querier) {
 			defer wg.Done()
 
-			values, err := q.LabelValues(name, matchers...)
-
-			mtx.Lock()
-			if err != nil {
-				multiErr = multierr.Append(multiErr, err)
-			} else {
-				results = append(results, values)
-			}
-			mtx.Unlock()
-		}(querier)
+			values[idx], errors[idx] = q.LabelValues(name, matchers...)
+		}(i, querier)
 	}
 	wg.Wait()
+
+	multiErr := multierr.Combine(errors...)
 
 	if multiErr != nil {
 		return nil, multiErr
 	}
 
-	return mergeStringSlices(results), nil
+	return mergeStringSlices(values), nil
 }
 
 func mergeStringSlices(ss [][]string) []string {

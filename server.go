@@ -180,7 +180,7 @@ func Run() {
 		})
 		router.GET("/stat", func(ctx *fasthttp.RequestCtx) {
 			if arg := ctx.QueryArgs().Peek("reset"); arg != nil {
-				localStorage.AddReqHandler.ResetStat()
+				localStorage.OpStat.Reset()
 			}
 			stat, err := localStorage.Info(true)
 			if err != nil {
@@ -199,6 +199,7 @@ func Run() {
 	}
 
 	if Cfg.Gateway != nil {
+		promql.LookbackDelta = time.Duration(Cfg.LookbackDelta)
 		fanout := backend.NewFanout(localStorage)
 		queryEngine := promql.NewEngine(nil, Cfg.Gateway.QueryEngine.Concurrency, time.Duration(Cfg.Gateway.QueryEngine.Timeout))
 

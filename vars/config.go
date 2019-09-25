@@ -6,7 +6,7 @@ import (
 	"github.com/baudtime/baudtime/util/toml"
 )
 
-type EtcdCommonConfig struct {
+type EtcdConfig struct {
 	Endpoints     []string      `toml:"endpoints"`
 	DialTimeout   toml.Duration `toml:"dial_timeout"`
 	RWTimeout     toml.Duration `toml:"rw_timeout"`
@@ -45,7 +45,6 @@ type GatewayConfig struct {
 
 type TSDBConfig struct {
 	Path              string        `toml:"path"`
-	LookbackDelta     toml.Duration `toml:"lookback_delta"`
 	RetentionDuration toml.Duration `toml:"retention_duration"` // Duration of persisted data to keep.
 	BlockRanges       []int64       `toml:"block_ranges"`       // The sizes of the Blocks.
 	EnableWal         bool          `toml:"enable_wal,omitempty"`
@@ -76,23 +75,25 @@ type JaegerConfig struct {
 }
 
 type Config struct {
-	TcpPort    string           `toml:"tcp_port"`
-	HttpPort   string           `toml:"http_port"`
-	MaxConn    int              `toml:"max_conn"`
-	NameSpace  string           `toml:"namespace,omitempty"`
-	EtcdCommon EtcdCommonConfig `toml:"etcd_common"`
-	Gateway    *GatewayConfig   `toml:"gateway,omitempty"`
-	Storage    *StorageConfig   `toml:"storage,omitempty"`
-	Jaeger     *JaegerConfig    `toml:"jaeger,omitempty"`
+	TcpPort       string         `toml:"tcp_port"`
+	HttpPort      string         `toml:"http_port"`
+	MaxConn       int            `toml:"max_conn"`
+	NameSpace     string         `toml:"namespace,omitempty"`
+	LookbackDelta toml.Duration  `toml:"lookback_delta"`
+	Etcd          EtcdConfig     `toml:"etcd"`
+	Gateway       *GatewayConfig `toml:"gateway,omitempty"`
+	Storage       *StorageConfig `toml:"storage,omitempty"`
+	Jaeger        *JaegerConfig  `toml:"jaeger,omitempty"`
 }
 
 var Cfg = Config{
-	TcpPort:   "8121",
-	HttpPort:  "8080",
-	MaxConn:   10000,
-	NameSpace: "baudtime",
+	TcpPort:       "8121",
+	HttpPort:      "8080",
+	MaxConn:       10000,
+	NameSpace:     "baudtime",
+	LookbackDelta: toml.Duration(5 * time.Second),
 
-	EtcdCommon: EtcdCommonConfig{
+	Etcd: EtcdConfig{
 		Endpoints:     []string{"localhost:2379"},
 		DialTimeout:   toml.Duration(5 * time.Second),
 		RWTimeout:     toml.Duration(15 * time.Second),

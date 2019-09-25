@@ -177,6 +177,18 @@ func (z *LabelValuesRequest) DecodeMsg(dc *msgp.Reader) (err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
+		case "mint":
+			z.Mint, err = dc.ReadInt64()
+			if err != nil {
+				err = msgp.WrapError(err, "Mint")
+				return
+			}
+		case "maxt":
+			z.Maxt, err = dc.ReadInt64()
+			if err != nil {
+				err = msgp.WrapError(err, "Maxt")
+				return
+			}
 		case "name":
 			z.Name, err = dc.ReadString()
 			if err != nil {
@@ -233,9 +245,29 @@ func (z *LabelValuesRequest) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *LabelValuesRequest) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 3
+	// map header, size 5
+	// write "mint"
+	err = en.Append(0x85, 0xa4, 0x6d, 0x69, 0x6e, 0x74)
+	if err != nil {
+		return
+	}
+	err = en.WriteInt64(z.Mint)
+	if err != nil {
+		err = msgp.WrapError(err, "Mint")
+		return
+	}
+	// write "maxt"
+	err = en.Append(0xa4, 0x6d, 0x61, 0x78, 0x74)
+	if err != nil {
+		return
+	}
+	err = en.WriteInt64(z.Maxt)
+	if err != nil {
+		err = msgp.WrapError(err, "Maxt")
+		return
+	}
 	// write "name"
-	err = en.Append(0x83, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
+	err = en.Append(0xa4, 0x6e, 0x61, 0x6d, 0x65)
 	if err != nil {
 		return
 	}
@@ -284,9 +316,15 @@ func (z *LabelValuesRequest) EncodeMsg(en *msgp.Writer) (err error) {
 // MarshalMsg implements msgp.Marshaler
 func (z *LabelValuesRequest) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 3
+	// map header, size 5
+	// string "mint"
+	o = append(o, 0x85, 0xa4, 0x6d, 0x69, 0x6e, 0x74)
+	o = msgp.AppendInt64(o, z.Mint)
+	// string "maxt"
+	o = append(o, 0xa4, 0x6d, 0x61, 0x78, 0x74)
+	o = msgp.AppendInt64(o, z.Maxt)
 	// string "name"
-	o = append(o, 0x83, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
+	o = append(o, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
 	o = msgp.AppendString(o, z.Name)
 	// string "matchers"
 	o = append(o, 0xa8, 0x6d, 0x61, 0x74, 0x63, 0x68, 0x65, 0x72, 0x73)
@@ -326,6 +364,18 @@ func (z *LabelValuesRequest) UnmarshalMsg(bts []byte) (o []byte, err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
+		case "mint":
+			z.Mint, bts, err = msgp.ReadInt64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "Mint")
+				return
+			}
+		case "maxt":
+			z.Maxt, bts, err = msgp.ReadInt64Bytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "Maxt")
+				return
+			}
 		case "name":
 			z.Name, bts, err = msgp.ReadStringBytes(bts)
 			if err != nil {
@@ -382,7 +432,7 @@ func (z *LabelValuesRequest) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *LabelValuesRequest) Msgsize() (s int) {
-	s = 1 + 5 + msgp.StringPrefixSize + len(z.Name) + 9 + msgp.ArrayHeaderSize
+	s = 1 + 5 + msgp.Int64Size + 5 + msgp.Int64Size + 5 + msgp.StringPrefixSize + len(z.Name) + 9 + msgp.ArrayHeaderSize
 	for za0001 := range z.Matchers {
 		if z.Matchers[za0001] == nil {
 			s += msgp.NilSize

@@ -44,7 +44,6 @@ func LabelsToProto(lbs labels.Labels) []msg.Label {
 	proto := make([]msg.Label, 0, len(lbs))
 	for _, l := range lbs {
 		proto = append(proto, msg.Label{Name: l.Name, Value: l.Value})
-
 	}
 	return proto
 }

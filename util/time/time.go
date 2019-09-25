@@ -21,8 +21,6 @@ import (
 	"github.com/baudtime/baudtime/util/toml"
 )
 
-const Day = 24 * time.Hour
-
 // FromTime returns a new millisecond timestamp from a time.
 func FromTime(t time.Time) int64 {
 	return t.Unix()*1000 + int64(t.Nanosecond())/int64(time.Millisecond)

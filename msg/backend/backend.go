@@ -55,6 +55,8 @@ type AddRequest struct {
 }
 
 type LabelValuesRequest struct {
+	Mint     int64      `msg:"mint"`
+	Maxt     int64      `msg:"maxt"`
 	Name     string     `msg:"name"`
 	Matchers []*Matcher `msg:"matchers"`
 	SpanCtx  []byte     `msg:"spanCtx"`

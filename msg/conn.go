@@ -9,8 +9,8 @@ const (
 	CtrlCode_CloseWrite
 )
 
-func (c CtrlCode) String() string {
-	switch c {
+func (z CtrlCode) String() string {
+	switch z {
 	case CtrlCode_CloseRead:
 		return "close read"
 	case CtrlCode_CloseWrite:

@@ -65,8 +65,12 @@ func (q *querier) Select(selectParams *SelectParams, matchers ...*labels.Matcher
 // LabelValues implements Querier and is a noop.
 func (q *querier) LabelValues(name string, matchers ...*labels.Matcher) ([]string, error) {
 	labelValuesRequest := &backendmsg.LabelValuesRequest{
-		Name:     name,
-		Matchers: util.MatchersToProto(matchers),
+		Mint: q.mint,
+		Maxt: q.maxt,
+		Name: name,
+	}
+	if len(matchers) > 0 {
+		labelValuesRequest.Matchers = util.MatchersToProto(matchers)
 	}
 	res, err := q.client.LabelValues(q.ctx, labelValuesRequest)
 	if err != nil {
