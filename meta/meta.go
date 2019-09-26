@@ -17,6 +17,7 @@ package meta
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"strconv"
@@ -333,10 +334,13 @@ func FailoverIfNeeded(shardID string) {
 		return
 	}
 
-	buf := make([]byte, tcp.MaxMsgSize)
-	var msgCodec tcp.MsgCodec
+	var (
+		slaveOfReq      = tcp.Message{Message: &backendmsg.SlaveOfCommand{}}
+		slaveOfReqBytes = make([]byte, 1+binary.MaxVarintLen64+slaveOfReq.SizeOfRaw())
+		msgCodec        tcp.MsgCodec
+	)
 
-	n, err := msgCodec.Encode(tcp.Message{Message: &backendmsg.SlaveOfCommand{}}, buf) //slaveof no one
+	n, err := msgCodec.Encode(slaveOfReq, slaveOfReqBytes) //slaveof no one
 	if err != nil {
 		level.Error(vars.Logger).Log("err", err)
 		return
@@ -373,7 +377,7 @@ func FailoverIfNeeded(shardID string) {
 		}
 		defer slaveConn.Close()
 
-		err = slaveConn.WriteMsg(buf[:n])
+		err = slaveConn.WriteMsg(slaveOfReqBytes[:n])
 		if err != nil {
 			return err
 		}
@@ -384,12 +388,12 @@ func FailoverIfNeeded(shardID string) {
 		go func() {
 			defer close(c)
 
-			nn, er := slaveConn.ReadMsg(buf)
+			slaveOfRespBytes, er := slaveConn.ReadMsg()
 			if er != nil {
 				return
 			}
 
-			reply, er := msgCodec.Decode(buf[:nn])
+			reply, er := msgCodec.Decode(slaveOfRespBytes)
 			if raw := reply.GetRaw(); er == nil && raw != nil {
 				reply, ok := raw.(*msg.GeneralResponse)
 				if !ok {

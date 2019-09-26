@@ -51,10 +51,7 @@ func (msg *Message) SizeOfRaw() int {
 
 type MsgType uint8
 
-const (
-	MaxMsgSize int     = 1e7
-	BadMsgType MsgType = 255
-)
+const BadMsgType MsgType = 255
 
 var (
 	EmptyMsg        = Message{}

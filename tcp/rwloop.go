@@ -78,10 +78,9 @@ func (loop *ReadWriteLoop) LoopWrite() {
 
 func (loop *ReadWriteLoop) LoopRead() {
 	ctx := context.Background()
-	bytes := make([]byte, MaxMsgSize)
 
 	for loop.IsRunning() && !loop.ReadClosed() {
-		n, err := loop.conn.ReadMsg(bytes)
+		inBytes, err := loop.conn.ReadMsg()
 		if err != nil {
 			if _, ok := err.(net.Error); ok || err == io.EOF || err == io.ErrUnexpectedEOF {
 				loop.Exit()
@@ -92,7 +91,7 @@ func (loop *ReadWriteLoop) LoopRead() {
 			continue
 		}
 
-		in, err := loop.codec.Decode(bytes[:n])
+		in, err := loop.codec.Decode(inBytes)
 		if err != nil {
 			level.Error(Logger).Log("msg", "decode err", "err", err)
 			loop.Exit()
@@ -110,7 +109,7 @@ func (loop *ReadWriteLoop) LoopRead() {
 			continue
 		}
 
-		out := loop.handle(ctx, in, bytes[:n])
+		out := loop.handle(ctx, in, inBytes)
 		Put(in.GetRaw())
 
 		if loop.WriteClosed() || out == EmptyMsg {
@@ -118,7 +117,7 @@ func (loop *ReadWriteLoop) LoopRead() {
 		}
 
 		outBytes := bytesPool.Get(1 + binary.MaxVarintLen64 + out.SizeOfRaw()).([]byte)
-		n, err = loop.codec.Encode(out, outBytes)
+		n, err := loop.codec.Encode(out, outBytes)
 		if err != nil {
 			level.Error(Logger).Log("msg", "encode err", "err", err)
 			continue

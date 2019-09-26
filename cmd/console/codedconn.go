@@ -20,11 +20,12 @@ import (
 	"github.com/baudtime/baudtime/tcp"
 )
 
+const MaxMsgSize int = 1e7
+
 type CodedConn struct {
 	codec tcp.MsgCodec
 	*tcp.Conn
-	rBuf []byte
-	wBuf []byte
+	encBuf []byte
 }
 
 func NewCodedConn(address string) (*CodedConn, error) {
@@ -34,21 +35,20 @@ func NewCodedConn(address string) (*CodedConn, error) {
 	}
 
 	return &CodedConn{
-		Conn:  c,
-		rBuf:  make([]byte, tcp.MaxMsgSize),
-		wBuf:  make([]byte, tcp.MaxMsgSize),
+		Conn:   c,
+		encBuf: make([]byte, MaxMsgSize),
 	}, nil
 }
 
 func (c *CodedConn) WriteRaw(msg msg.Message) error {
 	n, err := c.codec.Encode(tcp.Message{
 		Message: msg,
-	}, c.wBuf)
+	}, c.encBuf)
 
 	if err != nil {
 		return err
 	}
-	err = c.WriteMsg(c.wBuf[:n])
+	err = c.WriteMsg(c.encBuf[:n])
 	if err != nil {
 		return err
 	}
@@ -57,11 +57,11 @@ func (c *CodedConn) WriteRaw(msg msg.Message) error {
 }
 
 func (c *CodedConn) ReadRaw() (msg.Message, error) {
-	n, err := c.ReadMsg(c.rBuf)
+	msgBytes, err := c.ReadMsg()
 	if err != nil {
 		return tcp.EmptyMsg, err
 	}
 
-	m, err := c.codec.Decode(c.rBuf[:n])
+	m, err := c.codec.Decode(msgBytes)
 	return m.Message, err
 }

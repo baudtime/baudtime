@@ -16,20 +16,20 @@
 package tcp
 
 import (
-	"bufio"
 	"encoding/binary"
 	"io"
 	"net"
 	"os"
 	"syscall"
 	"time"
+
+	"github.com/philhofer/fwd"
 )
 
 type Conn struct {
-	*bufio.Reader
-	*bufio.Writer
+	*fwd.Reader
+	*fwd.Writer
 	raw  *net.TCPConn
-	rBuf []byte
 	wBuf []byte
 }
 
@@ -45,10 +45,9 @@ func NewConn(c *net.TCPConn) *Conn {
 		f:  f,
 	}
 	return &Conn{
-		Reader: bufio.NewReaderSize(rw, 1e5), // We make a buffered Reader & Writer to reduce syscalls.
-		Writer: bufio.NewWriterSize(rw, 1e4),
+		Reader: fwd.NewReaderSize(rw, 1e5), // We make a buffered Reader & Writer to reduce syscalls.
+		Writer: fwd.NewWriterSize(rw, 1e4),
 		raw:    c,
-		rBuf:   make([]byte, 4),
 		wBuf:   make([]byte, 4),
 	}
 }
@@ -71,24 +70,19 @@ func Connect(address string) (*Conn, error) {
 	return NewConn(c), nil
 }
 
-func (c *Conn) ReadMsg(buf []byte) (int, error) {
-	_, err := io.ReadFull(c.Reader, c.rBuf)
+func (c *Conn) ReadMsg() ([]byte, error) {
+	buf, err := c.Reader.Next(4)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	//read message length
-	msgLen := int(binary.BigEndian.Uint32(c.rBuf))
-	if msgLen <= 0 || msgLen > MaxMsgSize {
-		return 0, io.ErrUnexpectedEOF
+	msgLen := int(binary.BigEndian.Uint32(buf))
+	if msgLen <= 0 {
+		return nil, io.ErrUnexpectedEOF
 	}
 
-	_, err = io.ReadFull(c.Reader, buf[:msgLen])
-	if err != nil {
-		return 0, err
-	}
-
-	return msgLen, nil
+	return c.Reader.Next(msgLen)
 }
 
 func (c *Conn) WriteMsg(msg []byte) error {
