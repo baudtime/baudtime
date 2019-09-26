@@ -1395,9 +1395,10 @@ func (h *RequestHeader) tryRead(r *bufio.Reader, n int) error {
 			}
 		}
 
+		// n == 1 on the first read for the request.
 		if n == 1 {
 			// We didn't read a single byte.
-			return errNothingRead
+			return errNothingRead{err}
 		}
 
 		return fmt.Errorf("error when reading request headers: %s", err)
@@ -1498,7 +1499,10 @@ func (h *ResponseHeader) AppendBytes(dst []byte) []byte {
 	// or if it is explicitly set.
 	// See https://github.com/valyala/fasthttp/issues/28 .
 	if h.ContentLength() != 0 || len(h.contentType) > 0 {
-		dst = appendHeaderLine(dst, strContentType, h.ContentType())
+		contentType := h.ContentType()
+		if len(contentType) > 0 {
+			dst = appendHeaderLine(dst, strContentType, contentType)
+		}
 	}
 
 	if len(h.contentLengthBytes) > 0 {
@@ -2172,8 +2176,11 @@ func AppendNormalizedHeaderKeyBytes(dst, key []byte) []byte {
 var (
 	errNeedMore    = errors.New("need more data: cannot find trailing lf")
 	errSmallBuffer = errors.New("small read buffer. Increase ReadBufferSize")
-	errNothingRead = errors.New("read timeout with nothing read")
 )
+
+type errNothingRead struct {
+	error
+}
 
 // ErrSmallBuffer is returned when the provided buffer size is too small
 // for reading request and/or response headers.

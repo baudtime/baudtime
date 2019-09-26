@@ -19,7 +19,7 @@ import (
 	"sync"
 
 	"github.com/baudtime/baudtime/util"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 )
 
 const (

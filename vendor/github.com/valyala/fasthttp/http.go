@@ -3,6 +3,7 @@ package fasthttp
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -926,6 +927,10 @@ var ErrGetOnly = errors.New("non-GET request received")
 // io.EOF is returned if r is closed before reading the first header byte.
 func (req *Request) ReadLimitBody(r *bufio.Reader, maxBodySize int) error {
 	req.resetSkipHeader()
+	if err := req.Header.Read(r); err != nil {
+		return err
+	}
+
 	return req.readLimitBody(r, maxBodySize, false)
 }
 
@@ -933,10 +938,6 @@ func (req *Request) readLimitBody(r *bufio.Reader, maxBodySize int, getOnly bool
 	// Do not reset the request here - the caller must reset it before
 	// calling this method.
 
-	err := req.Header.Read(r)
-	if err != nil {
-		return err
-	}
 	if getOnly && !req.Header.IsGet() {
 		return ErrGetOnly
 	}
@@ -1148,6 +1149,24 @@ func (req *Request) Write(w *bufio.Writer) error {
 		}
 		req.Header.SetHostBytes(host)
 		req.Header.SetRequestURIBytes(uri.RequestURI())
+
+		if len(uri.username) > 0 {
+			// RequestHeader.SetBytesKV only uses RequestHeader.bufKV.key
+			// So we are free to use RequestHeader.bufKV.value as a scratch pad for
+			// the base64 encoding.
+			nl := len(uri.username) + len(uri.password) + 1
+			tl := nl + base64.StdEncoding.EncodedLen(nl)
+			if tl > cap(req.Header.bufKV.value) {
+				req.Header.bufKV.value = make([]byte, 0, tl)
+			}
+			buf := req.Header.bufKV.value[:0]
+			buf = append(buf, uri.username...)
+			buf = append(buf, strColon...)
+			buf = append(buf, uri.password...)
+			buf = buf[:tl]
+			base64.StdEncoding.Encode(buf[nl:], buf[:nl])
+			req.Header.SetBytesKV(strAuthorization, buf[nl:])
+		}
 	}
 
 	if req.bodyStream != nil {

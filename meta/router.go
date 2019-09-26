@@ -18,7 +18,7 @@ package meta
 import (
 	"github.com/baudtime/baudtime/msg"
 	"github.com/baudtime/baudtime/vars"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"go.uber.org/multierr"

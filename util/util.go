@@ -17,7 +17,7 @@ package util
 
 import (
 	"github.com/baudtime/baudtime/msg"
-	"github.com/cespare/xxhash"
+	"github.com/cespare/xxhash/v2"
 	"net"
 	"unsafe"
 )
