@@ -41,14 +41,26 @@ func Router() *router {
 }
 
 //used by write
-func (r *router) GetShardIDByLabels(t time.Time, lbls []msg.Label, hash uint64) (string, error) {
-	shardGroup, err := r.meta.getShardGroup(tickNO(t))
+func (r *router) GetShardIDByLabels(t time.Time, lbls []msg.Label, hash uint64, createIfAbsent bool) (string, error) {
+	n := tickNO(t)
+
+	shardGroup, err := r.meta.getShardGroup(n)
 	if err != nil {
 		return "", err
 	}
 
 	if len(shardGroup) == 0 {
-		return "", errors.New("shard group is empty")
+		if createIfAbsent && n <= tickNO(time.Now()) {
+			shardGroup, err = r.meta.creatShardGroup(n)
+			if err != nil {
+				return "", err
+			}
+			if len(shardGroup) == 0 {
+				return "", errors.New("can't create a new shard group")
+			}
+		} else {
+			return "", nil
+		}
 	}
 
 	for _, l := range lbls {
@@ -69,7 +81,7 @@ func (r *router) GetShardIDsByTime(t time.Time, matchers ...*labels.Matcher) ([]
 	}
 
 	if len(shardGroup) == 0 {
-		return nil, errors.New("shard group is empty")
+		return nil, nil
 	}
 
 	for _, m := range matchers {
@@ -85,34 +97,49 @@ func (r *router) GetShardIDsByTime(t time.Time, matchers ...*labels.Matcher) ([]
 //used by query
 func (r *router) GetShardIDsByTimeSpan(from, to time.Time, matchers ...*labels.Matcher) ([]string, error) {
 	var multiErr error
-	idSet := make(map[string]struct{})
 
-	for t := from; t.Before(to); t = t.Add(24 * time.Hour) {
-		if ids, err := r.GetShardIDsByTime(t, matchers...); err != nil {
-			multiErr = multierr.Append(multiErr, err)
-		} else {
-			for _, id := range ids {
-				idSet[id] = struct{}{}
-			}
-		}
+	shardNum := len(r.meta.AllShards())
+	if shardNum == 0 {
+		return nil, nil
 	}
+
+	idSet := make(map[string]struct{})
 
 	if ids, err := r.GetShardIDsByTime(to, matchers...); err != nil {
 		multiErr = multierr.Append(multiErr, err)
 	} else {
 		for _, id := range ids {
 			idSet[id] = struct{}{}
+			if len(idSet) == shardNum {
+				return setToSlice(idSet), nil
+			}
 		}
 	}
 
-	ids := make([]string, 0, len(idSet))
-	for id := range idSet {
-		ids = append(ids, id)
+	for t := from; t.Before(to); t = t.Add(time.Duration(vars.Cfg.Gateway.Route.ShardGroupTickInterval)) {
+		if ids, err := r.GetShardIDsByTime(t, matchers...); err != nil {
+			multiErr = multierr.Append(multiErr, err)
+		} else {
+			for _, id := range ids {
+				idSet[id] = struct{}{}
+				if len(idSet) == shardNum {
+					return setToSlice(idSet), nil
+				}
+			}
+		}
 	}
 
-	return ids, multiErr
+	return setToSlice(idSet), multiErr
 }
 
 func tickNO(t time.Time) uint64 {
 	return uint64(t.Sub(baseTime) / time.Duration(vars.Cfg.Gateway.Route.ShardGroupTickInterval))
+}
+
+func setToSlice(set map[string]struct{}) []string {
+	slice := make([]string, 0, len(set))
+	for elem := range set {
+		slice = append(slice, elem)
+	}
+	return slice
 }

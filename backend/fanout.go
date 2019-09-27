@@ -17,6 +17,7 @@ package backend
 import (
 	"container/heap"
 	"context"
+	"math"
 	"strings"
 	"sync"
 
@@ -31,6 +32,8 @@ import (
 	"github.com/prometheus/prometheus/pkg/labels"
 	"go.uber.org/multierr"
 )
+
+var shardsNotFound = errors.New("no shards is found")
 
 type Fanout struct {
 	localStorage *storage.Storage
@@ -80,6 +83,9 @@ func (q *fanoutQuerier) Select(params *SelectParams, matchers ...*labels.Matcher
 	if err != nil {
 		return emptySeriesSet, err
 	}
+	if len(shardIDs) == 0 {
+		return emptySeriesSet, shardsNotFound
+	}
 
 	shardVisitor, found := visitor.GetVisitor(vars.Cfg.Gateway.QueryStrategy)
 	if !found {
@@ -109,9 +115,24 @@ func (q *fanoutQuerier) Select(params *SelectParams, matchers ...*labels.Matcher
 }
 
 func (q *fanoutQuerier) LabelValues(name string, matchers ...*labels.Matcher) ([]string, error) {
-	shardIDs, err := meta.Router().GetShardIDsByTimeSpan(time.Time(q.mint), time.Time(q.maxt), matchers...)
-	if err != nil {
-		return nil, err
+	var shardIDs []string
+
+	if q.mint < 0 || q.maxt == math.MaxInt64 {
+		allShards := meta.AllShards()
+		shardIDs = make([]string, 0, len(allShards))
+
+		for shardID := range allShards {
+			shardIDs = append(shardIDs, shardID)
+		}
+	} else {
+		var err error
+		shardIDs, err = meta.Router().GetShardIDsByTimeSpan(time.Time(q.mint), time.Time(q.maxt), matchers...)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(shardIDs) == 0 {
+		return nil, shardsNotFound
 	}
 
 	shardVisitor, found := visitor.GetVisitor(vars.Cfg.Gateway.QueryStrategy)
@@ -492,9 +513,12 @@ type fanoutAppender struct {
 }
 
 func (fanoutApp *fanoutAppender) Add(l []msg.Label, t int64, v float64, hash uint64) error {
-	shardID, err := meta.Router().GetShardIDByLabels(time.Time(t), l, hash)
+	shardID, err := meta.Router().GetShardIDByLabels(time.Time(t), l, hash, true)
 	if err != nil {
 		return err
+	}
+	if shardID == "" {
+		return shardsNotFound
 	}
 
 	app, found := fanoutApp.appenders[shardID]

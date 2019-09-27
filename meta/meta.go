@@ -59,18 +59,7 @@ func (m *meta) getShardGroup(tickNO uint64) ([]string, error) {
 	if found {
 		return shardGroup, nil
 	}
-
-	var err error
-	shardGroup, err = m.getShardGroupFromEtcd(tickNO)
-	if err != nil {
-		return nil, err
-	}
-
-	evicted := m.route.Put(tickNO, shardGroup)
-	for _, tickNO := range evicted {
-		etcdDel(routeInfoPrefix() + strconv.FormatUint(tickNO, 10))
-	}
-	return shardGroup, nil
+	return m.getShardGroupFromEtcd(tickNO)
 }
 
 func (m *meta) getShardGroupFromEtcd(tickNO uint64) ([]string, error) {
@@ -84,9 +73,14 @@ func (m *meta) getShardGroupFromEtcd(tickNO uint64) ([]string, error) {
 		return shardGroup, nil
 	}
 
-	if err != ErrKeyNotFound {
-		return nil, err
+	if err == ErrKeyNotFound {
+		return nil, nil
 	}
+	return nil, err
+}
+
+func (m *meta) creatShardGroup(tickNO uint64) ([]string, error) {
+	var shardGroup []string
 
 	masters, err := GetMasters()
 	if err != nil {
@@ -100,14 +94,19 @@ func (m *meta) getShardGroupFromEtcd(tickNO uint64) ([]string, error) {
 	}
 
 	if len(shardGroup) == 0 {
-		return nil, errors.Errorf("not enough shards to init %v", key)
+		return nil, errors.Errorf("not enough shards to init %v", tickNO)
 	}
 
+	key := routeInfoPrefix() + strconv.FormatUint(tickNO, 10)
 	err = etcdPut(key, shardGroup, clientv3.NoLease)
 	if err != nil {
 		return nil, err
 	}
 
+	evicted := m.route.Put(tickNO, shardGroup)
+	for _, tickNO := range evicted {
+		etcdDel(routeInfoPrefix() + strconv.FormatUint(tickNO, 10))
+	}
 	return shardGroup, nil
 }
 
@@ -115,6 +114,11 @@ func (m *meta) GetShard(shardID string) (shard *Shard, found bool) {
 	shards := (*map[string]*Shard)(atomic.LoadPointer(&m.shards))
 	shard, found = (*shards)[shardID]
 	return
+}
+
+func (m *meta) AllShards() map[string]*Shard {
+	shards := (*map[string]*Shard)(atomic.LoadPointer(&m.shards))
+	return *shards
 }
 
 func (m *meta) RefreshTopology() error {
@@ -287,8 +291,7 @@ func Init() (err error) {
 }
 
 func AllShards() map[string]*Shard {
-	shards := (*map[string]*Shard)(atomic.LoadPointer(&globalMeta.shards))
-	return *shards
+	return globalMeta.AllShards()
 }
 
 func GetShard(shardID string) (*Shard, bool) {

@@ -330,18 +330,6 @@ func (z *LabelValuesRequest) DecodeMsg(dc *msgp.Reader) (err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "start":
-			z.Start, err = dc.ReadString()
-			if err != nil {
-				err = msgp.WrapError(err, "Start")
-				return
-			}
-		case "end":
-			z.End, err = dc.ReadString()
-			if err != nil {
-				err = msgp.WrapError(err, "End")
-				return
-			}
 		case "name":
 			z.Name, err = dc.ReadString()
 			if err != nil {
@@ -372,30 +360,10 @@ func (z *LabelValuesRequest) DecodeMsg(dc *msgp.Reader) (err error) {
 }
 
 // EncodeMsg implements msgp.Encodable
-func (z *LabelValuesRequest) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 5
-	// write "start"
-	err = en.Append(0x85, 0xa5, 0x73, 0x74, 0x61, 0x72, 0x74)
-	if err != nil {
-		return
-	}
-	err = en.WriteString(z.Start)
-	if err != nil {
-		err = msgp.WrapError(err, "Start")
-		return
-	}
-	// write "end"
-	err = en.Append(0xa3, 0x65, 0x6e, 0x64)
-	if err != nil {
-		return
-	}
-	err = en.WriteString(z.End)
-	if err != nil {
-		err = msgp.WrapError(err, "End")
-		return
-	}
+func (z LabelValuesRequest) EncodeMsg(en *msgp.Writer) (err error) {
+	// map header, size 3
 	// write "name"
-	err = en.Append(0xa4, 0x6e, 0x61, 0x6d, 0x65)
+	err = en.Append(0x83, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
 	if err != nil {
 		return
 	}
@@ -428,17 +396,11 @@ func (z *LabelValuesRequest) EncodeMsg(en *msgp.Writer) (err error) {
 }
 
 // MarshalMsg implements msgp.Marshaler
-func (z *LabelValuesRequest) MarshalMsg(b []byte) (o []byte, err error) {
+func (z LabelValuesRequest) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 5
-	// string "start"
-	o = append(o, 0x85, 0xa5, 0x73, 0x74, 0x61, 0x72, 0x74)
-	o = msgp.AppendString(o, z.Start)
-	// string "end"
-	o = append(o, 0xa3, 0x65, 0x6e, 0x64)
-	o = msgp.AppendString(o, z.End)
+	// map header, size 3
 	// string "name"
-	o = append(o, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
+	o = append(o, 0x83, 0xa4, 0x6e, 0x61, 0x6d, 0x65)
 	o = msgp.AppendString(o, z.Name)
 	// string "constraint"
 	o = append(o, 0xaa, 0x63, 0x6f, 0x6e, 0x73, 0x74, 0x72, 0x61, 0x69, 0x6e, 0x74)
@@ -467,18 +429,6 @@ func (z *LabelValuesRequest) UnmarshalMsg(bts []byte) (o []byte, err error) {
 			return
 		}
 		switch msgp.UnsafeString(field) {
-		case "start":
-			z.Start, bts, err = msgp.ReadStringBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "Start")
-				return
-			}
-		case "end":
-			z.End, bts, err = msgp.ReadStringBytes(bts)
-			if err != nil {
-				err = msgp.WrapError(err, "End")
-				return
-			}
 		case "name":
 			z.Name, bts, err = msgp.ReadStringBytes(bts)
 			if err != nil {
@@ -510,8 +460,8 @@ func (z *LabelValuesRequest) UnmarshalMsg(bts []byte) (o []byte, err error) {
 }
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
-func (z *LabelValuesRequest) Msgsize() (s int) {
-	s = 1 + 6 + msgp.StringPrefixSize + len(z.Start) + 4 + msgp.StringPrefixSize + len(z.End) + 5 + msgp.StringPrefixSize + len(z.Name) + 11 + msgp.StringPrefixSize + len(z.Constraint) + 8 + msgp.StringPrefixSize + len(z.Timeout)
+func (z LabelValuesRequest) Msgsize() (s int) {
+	s = 1 + 5 + msgp.StringPrefixSize + len(z.Name) + 11 + msgp.StringPrefixSize + len(z.Constraint) + 8 + msgp.StringPrefixSize + len(z.Timeout)
 	return
 }
 

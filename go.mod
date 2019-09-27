@@ -11,7 +11,7 @@ require (
 	github.com/influxdata/influxdb1-client v0.0.0-20190809212627-fc22c7df067e
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/peterh/liner v1.1.0
-	github.com/philhofer/fwd v1.0.0 // indirect
+	github.com/philhofer/fwd v1.0.0
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/common v0.6.0
 	github.com/prometheus/prometheus v2.10.0+incompatible

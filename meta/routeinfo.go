@@ -30,22 +30,25 @@ func (r *RouteInfo) Put(tickNO uint64, v []string) (evicted []uint64) {
 		r.Timeline = tickNO
 	}
 
-	r.Map.Store(tickNO, v)
+	_, loaded := r.Map.LoadOrStore(tickNO, v)
 
-	tickNum := uint64(vars.Cfg.Gateway.Route.ShardGroupTTL / vars.Cfg.Gateway.Route.ShardGroupTickInterval)
+	if !loaded {
+		tickNum := uint64(vars.Cfg.Gateway.Route.ShardGroupTTL / vars.Cfg.Gateway.Route.ShardGroupTickInterval)
 
-	r.Map.Range(func(tickNO, value interface{}) bool {
-		if r.Timeline-tickNO.(uint64) > tickNum {
-			evicted = append(evicted, tickNO.(uint64))
-		}
-		return true
-	})
+		r.Map.Range(func(tickNO, value interface{}) bool {
+			if r.Timeline-tickNO.(uint64) > tickNum {
+				evicted = append(evicted, tickNO.(uint64))
+			}
+			return true
+		})
 
-	if len(evicted) > 0 {
-		for t := range evicted {
-			r.Map.Delete(t)
+		if len(evicted) > 0 {
+			for t := range evicted {
+				r.Map.Delete(t)
+			}
 		}
 	}
+
 	return
 }
 

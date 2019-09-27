@@ -32,8 +32,6 @@ type AddRequest struct {
 }
 
 type LabelValuesRequest struct {
-	Start      string `msg:"start"`
-	End        string `msg:"end"`
 	Name       string `msg:"name"`
 	Constraint string `msg:"constraint"`
 	Timeout    string `msg:"timeout"`

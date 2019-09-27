@@ -29,14 +29,13 @@ import (
 	gatewaymsg "github.com/baudtime/baudtime/msg/gateway"
 	"github.com/baudtime/baudtime/promql"
 	"github.com/baudtime/baudtime/util"
+	ts "github.com/baudtime/baudtime/util/time"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	lb "github.com/prometheus/prometheus/pkg/labels"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/multierr"
-
-	tm "github.com/baudtime/baudtime/util/time"
 )
 
 type queryResult struct {
@@ -79,7 +78,7 @@ func (gateway *Gateway) RangeQuery(request *gatewaymsg.RangeQueryRequest) *gatew
 }
 
 func (gateway *Gateway) LabelValues(request *gatewaymsg.LabelValuesRequest) *msg.LabelValuesResponse {
-	values, err := gateway.labelValues(request.Start, request.End, request.Name, request.Constraint, request.Timeout)
+	values, err := gateway.labelValues(request.Name, request.Constraint, request.Timeout)
 	if err != nil {
 		return &msg.LabelValuesResponse{Status: msg.StatusCode_Failed, ErrorMsg: err.Error()}
 	}
@@ -174,21 +173,12 @@ func (gateway *Gateway) HttpRangeQuery(c *fasthttp.RequestCtx) {
 
 func (gateway *Gateway) HttpLabelValues(c *fasthttp.RequestCtx) {
 	exeHttpQuery(c, func() (interface{}, error) {
-		var start, end, constraint, timeout string
-
-		if arg := c.QueryArgs().Peek("start"); arg != nil {
-			start = string(arg)
-		}
-
-		if arg := c.QueryArgs().Peek("end"); arg != nil {
-			end = string(arg)
-		}
-
 		name, ok := c.UserValue("name").(string)
 		if !ok {
 			return nil, errors.New("label name must be provided")
 		}
 
+		var constraint, timeout string
 		if arg := c.QueryArgs().Peek("constraint"); arg != nil {
 			constraint = string(arg)
 		}
@@ -197,7 +187,7 @@ func (gateway *Gateway) HttpLabelValues(c *fasthttp.RequestCtx) {
 			timeout = string(arg)
 		}
 
-		return gateway.labelValues(start, end, name, constraint, timeout)
+		return gateway.labelValues(name, constraint, timeout)
 	})
 }
 
@@ -324,38 +314,34 @@ func (gateway *Gateway) rangeQuery(startT, endT, step, timeout, query string) (*
 	}, nil
 }
 
-func (gateway *Gateway) labelValues(startT, endT, name, constraint, timeout string) ([]string, error) {
+func (gateway *Gateway) labelValues(name, constraint, timeout string) ([]string, error) {
 	span := opentracing.StartSpan("labelValues", opentracing.Tag{"name", name}, opentracing.Tag{"constraint", constraint})
 	defer span.Finish()
 
-	var mint int64 = math.MinInt64
-	if startT != "" {
-		t, err := ParseTime(startT)
-		if err != nil {
-			return nil, err
-		}
-		mint = tm.FromTime(t)
-	}
+	var (
+		mint, maxt int64 = math.MinInt64, math.MaxInt64
+		matchers   []*lb.Matcher
+	)
 
-	var maxt int64 = math.MaxInt64
-	if endT != "" {
-		t, err := ParseTime(endT)
-		if err != nil {
-			return nil, err
-		}
-		maxt = tm.FromTime(t)
-	}
-
-	if !model.LabelNameRE.MatchString(name) {
-		return nil, errors.Errorf("invalid label name: %q", name)
-	}
-
-	var matchers []*lb.Matcher
 	if constraint != "" {
-		var err error
-		matchers, err = promql.ParseMetricSelector(constraint)
+		now := time.Now()
+
+		expr, err := promql.ParseExpr(constraint)
 		if err != nil {
 			return nil, err
+		}
+
+		switch selector := expr.(type) {
+		case *promql.VectorSelector:
+			mint = ts.FromTime(now.Add(-selector.Offset))
+			maxt = mint
+			matchers = selector.LabelMatchers
+		case *promql.MatrixSelector:
+			mint = ts.FromTime(now.Add(-selector.Offset - selector.Range))
+			maxt = ts.FromTime(now.Add(-selector.Offset))
+			matchers = selector.LabelMatchers
+		default:
+			return nil, errors.Errorf("invalid expression type %s for constraint, must be Scalar or instant Vector", expr.Type())
 		}
 	}
 
