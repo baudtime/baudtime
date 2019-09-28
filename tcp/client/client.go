@@ -156,7 +156,7 @@ type Client struct {
 }
 
 func NewGatewayClient(name string, addrProvider ServiceAddrProvider) *Client {
-	go addrProvider.Watch()
+	addrProvider.Watch()
 
 	return &Client{
 		name: name,

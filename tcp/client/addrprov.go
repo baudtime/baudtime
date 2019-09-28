@@ -45,7 +45,7 @@ type StaticServiceAddrProvider struct {
 func NewStaticAddrProvider(addrs ...string) *StaticServiceAddrProvider {
 	return &StaticServiceAddrProvider{
 		healthyAddrs:   addrs,
-		unhealthyAddrs: make(map[string]struct{}, 0),
+		unhealthyAddrs: make(map[string]struct{}),
 		stopC:          make(chan struct{}),
 	}
 }
@@ -146,6 +146,10 @@ type DnsServiceAddrProvider struct {
 
 func NewDnsAddrProvider(serviceDomain string, servicePort int) *DnsServiceAddrProvider {
 	return &DnsServiceAddrProvider{
+		StaticServiceAddrProvider: StaticServiceAddrProvider{
+			unhealthyAddrs: make(map[string]struct{}),
+			stopC:          make(chan struct{}),
+		},
 		serviceDomain: serviceDomain,
 		servicePort:   strconv.Itoa(servicePort),
 		resolver:      &net.Resolver{PreferGo: true},
@@ -153,6 +157,37 @@ func NewDnsAddrProvider(serviceDomain string, servicePort int) *DnsServiceAddrPr
 }
 
 func (provider *DnsServiceAddrProvider) Watch() {
+	watch := func() {
+		hosts, err := provider.resolver.LookupHost(context.Background(), provider.serviceDomain)
+		if err == nil {
+			var addrs []string
+			for _, host := range hosts {
+				addrs = append(addrs, host+":"+provider.servicePort)
+			}
+			sort.Strings(addrs)
+
+			if !equal(addrs, provider.healthyAddrs) {
+				provider.mtx.Lock()
+				provider.healthyAddrs = addrs
+				provider.mtx.Unlock()
+			}
+		}
+
+		var addrsRecovered []string
+		provider.mtx.RLock()
+		for unhealthyAddr := range provider.unhealthyAddrs {
+			if util.Ping(unhealthyAddr) {
+				addrsRecovered = append(addrsRecovered, unhealthyAddr)
+			}
+		}
+		provider.mtx.RUnlock()
+
+		for _, addrR := range addrsRecovered {
+			provider.ServiceRecover(addrR)
+		}
+	}
+	watch()
+
 	go func() {
 		ticker := time.NewTicker(45 * time.Second)
 		defer ticker.Stop()
@@ -160,33 +195,7 @@ func (provider *DnsServiceAddrProvider) Watch() {
 		for {
 			select {
 			case <-ticker.C:
-				hosts, err := provider.resolver.LookupHost(context.Background(), provider.serviceDomain)
-				if err == nil {
-					var addrs []string
-					for _, host := range hosts {
-						addrs = append(addrs, host+":"+provider.servicePort)
-					}
-					sort.Strings(addrs)
-
-					if !equal(addrs, provider.healthyAddrs) {
-						provider.mtx.Lock()
-						provider.healthyAddrs = addrs
-						provider.mtx.Unlock()
-					}
-				}
-
-				var addrsRecovered []string
-				provider.mtx.RLock()
-				for unhealthyAddr := range provider.unhealthyAddrs {
-					if util.Ping(unhealthyAddr) {
-						addrsRecovered = append(addrsRecovered, unhealthyAddr)
-					}
-				}
-				provider.mtx.RUnlock()
-
-				for _, addrR := range addrsRecovered {
-					provider.ServiceRecover(addrR)
-				}
+				watch()
 			case <-provider.stopC:
 				return
 			}
