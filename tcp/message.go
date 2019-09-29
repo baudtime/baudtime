@@ -56,7 +56,7 @@ const BadMsgType MsgType = 255
 var (
 	EmptyMsg        = Message{}
 	MsgSizeOverflow = errors.New("message size overflow")
-	BadMsgTypeError = errors.New("bad message type")
+	BadMsgFormat    = errors.New("bad message format")
 )
 
 type MsgCodec struct{}
@@ -96,7 +96,14 @@ func (codec *MsgCodec) Decode(b []byte) (Message, error) {
 	msgType := MsgType(b[0])
 
 	//get message opaque
-	opaque, n := binary.Uvarint(b[1 : 1+binary.MaxVarintLen64])
+	l := 1 + binary.MaxVarintLen64
+	if len(b) < l {
+		l = len(b)
+	}
+	opaque, n := binary.Uvarint(b[1:l])
+	if n <= 0 {
+		return msg, BadMsgFormat
+	}
 
 	//get message proto
 	raw := Get(msgType)

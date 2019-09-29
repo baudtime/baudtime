@@ -130,7 +130,7 @@ func (c *ShardClient) Select(ctx context.Context, req *backendmsg.SelectRequest)
 	}
 
 	if selResp, ok := resp.(*backendmsg.SelectResponse); !ok {
-		return nil, errors.Wrapf(tcp.BadMsgTypeError, "the type of response is '%v'", reflect.TypeOf(resp))
+		return nil, errors.Wrapf(tcp.BadMsgFormat, "the type of response is '%v'", reflect.TypeOf(resp))
 	} else {
 		return selResp, nil
 	}
@@ -180,7 +180,7 @@ func (c *ShardClient) LabelValues(ctx context.Context, req *backendmsg.LabelValu
 	}
 
 	if lValsResp, ok := resp.(*msg.LabelValuesResponse); !ok {
-		return nil, errors.Wrapf(tcp.BadMsgTypeError, "the type of response is '%v'", reflect.TypeOf(resp))
+		return nil, errors.Wrapf(tcp.BadMsgFormat, "the type of response is '%v'", reflect.TypeOf(resp))
 	} else {
 		return lValsResp, nil
 	}
@@ -224,7 +224,7 @@ func (c *ShardClient) Add(ctx context.Context, req *backendmsg.AddRequest) (err 
 				if resp, err = cli.SyncRequest(ctx, req); err == nil {
 					generalResp, ok := resp.(*msg.GeneralResponse)
 					if !ok {
-						return tcp.BadMsgTypeError
+						return tcp.BadMsgFormat
 					}
 					if generalResp.Status == msg.StatusCode_Failed {
 						return errors.New(generalResp.Message)

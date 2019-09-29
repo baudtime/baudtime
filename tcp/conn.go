@@ -78,7 +78,7 @@ func (c *Conn) ReadMsg() ([]byte, error) {
 
 	//read message length
 	msgLen := int(binary.BigEndian.Uint32(buf))
-	if msgLen <= 0 {
+	if msgLen <= 2 { // one byte is type, one byte is at least for opaque
 		return nil, io.ErrUnexpectedEOF
 	}
 
