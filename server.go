@@ -224,6 +224,14 @@ func Run() {
 		router.GET("/api/v1/query_range", gateway.HttpRangeQuery)
 		router.POST("/api/v1/query_range", gateway.HttpRangeQuery)
 		router.GET("/api/v1/label/:name/values", gateway.HttpLabelValues)
+
+		for _, suffix := range []string{"", Base64Suffix} {
+			jobBase64Encoded := suffix == Base64Suffix
+			router.POST("/metrics/job"+suffix+"/:job/*labels", gateway.HttpIngest(jobBase64Encoded))
+			router.PUT("/metrics/job"+suffix+"/:job/*labels", gateway.HttpIngest(jobBase64Encoded))
+			router.POST("/metrics/job"+suffix+"/:job", gateway.HttpIngest(jobBase64Encoded))
+			router.PUT("/metrics/job"+suffix+"/:job", gateway.HttpIngest(jobBase64Encoded))
+		}
 	}
 
 	httpServer := &fasthttp.Server{}

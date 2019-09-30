@@ -17,10 +17,16 @@ package baudtime
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
+	"mime"
+	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,9 +40,12 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
 	lb "github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/pkg/textparse"
 	"github.com/valyala/fasthttp"
 	"go.uber.org/multierr"
 )
+
+const Base64Suffix = "@base64"
 
 type queryResult struct {
 	ResultType promql.ValueType `json:"resultType"`
@@ -189,6 +198,111 @@ func (gateway *Gateway) HttpLabelValues(c *fasthttp.RequestCtx) {
 
 		return gateway.labelValues(name, constraint, timeout)
 	})
+}
+
+func (gateway *Gateway) HttpIngest(jobBase64Encoded bool) func(c *fasthttp.RequestCtx) {
+	return func(c *fasthttp.RequestCtx) {
+		job, ok := c.UserValue("job").(string)
+		if ok && jobBase64Encoded {
+			var err error
+			if job, err = decodeBase64(job); err != nil {
+				c.Error(fmt.Sprintf("invalid base64 encoding in job name %q: %v", c.UserValue("job"), err), fasthttp.StatusBadRequest)
+				return
+			}
+		}
+		if !ok || job == "" {
+			c.Error("job name is required", http.StatusBadRequest)
+			return
+		}
+
+		var lbsURL map[string]string
+		if labelsString, ok := c.UserValue("labels").(string); ok {
+			var err error
+			lbsURL, err = splitLabels(labelsString)
+			if err != nil {
+				c.Error(err.Error(), http.StatusBadRequest)
+				return
+			}
+		} else {
+			lbsURL = make(map[string]string)
+		}
+		lbsURL["job"] = job
+
+		mediaType, _, err := mime.ParseMediaType(util.YoloString(c.Request.Header.ContentType()))
+		if mediaType == "application/vnd.google.protobuf" || err != nil {
+			c.Error("the content type of application/vnd.google.protobuf is not suggested", http.StatusBadRequest)
+			return
+		}
+
+		var appender backend.Appender
+
+		if v := gateway.appenderPool.Get(); v != nil {
+			appender = v.(backend.Appender)
+		} else {
+			appender, err = gateway.Backend.Appender()
+			if err != nil {
+				c.Error(fmt.Sprintf("no suitable appender: %v", err), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		hasher := util.NewHasher()
+		p := textparse.NewPromParser(c.PostBody())
+		for {
+			if et, er := p.Next(); er != nil {
+				if er != io.EOF {
+					err = multierr.Append(err, er)
+				}
+				break
+			} else if et != textparse.EntrySeries {
+				continue
+			}
+
+			t := ts.FromTime(time.Now())
+			_, tp, v := p.Series()
+			if tp != nil {
+				t = *tp
+			}
+
+			var lbsBody lb.Labels
+			p.Metric(&lbsBody)
+
+			lbs := make([]msg.Label, 0, len(lbsURL)+len(lbsBody))
+			_, hasInstance := lbsURL[model.InstanceLabel]
+
+			for _, l := range lbsBody {
+				if _, found := lbsURL[l.Name]; !found {
+					lbs = append(lbs, msg.Label{l.Name, l.Value})
+					if l.Name == model.InstanceLabel {
+						hasInstance = true
+					}
+				}
+			}
+			for name, value := range lbsURL {
+				lbs = append(lbs, msg.Label{name, value})
+			}
+			if !hasInstance {
+				lbs = append(lbs, msg.Label{model.InstanceLabel, ""})
+			}
+
+			sort.Slice(lbs, func(i, j int) bool {
+				return lbs[i].Name < lbs[j].Name
+			})
+			hash := hasher.Hash(lbs)
+
+			appender.Add(lbs, t, v, hash)
+		}
+
+		if er := appender.Flush(); er != nil {
+			err = multierr.Append(err, er)
+		}
+		gateway.appenderPool.Put(appender)
+
+		if err != nil {
+			c.Error(err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
 }
 
 func (gateway *Gateway) instantQuery(t, timeout, query string) (*queryResult, error) {
@@ -414,4 +528,40 @@ func ParseDuration(s string) (time.Duration, error) {
 		return time.Duration(d), nil
 	}
 	return 0, fmt.Errorf("cannot parse %q to a valid duration", s)
+}
+
+func decodeBase64(s string) (string, error) {
+	b, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(s, "="))
+	return string(b), err
+}
+
+// splitLabels splits a labels string into a label map mapping names to values.
+func splitLabels(labels string) (map[string]string, error) {
+	result := map[string]string{}
+	if len(labels) <= 1 {
+		return result, nil
+	}
+	components := strings.Split(labels[1:], "/")
+	if len(components)%2 != 0 {
+		return nil, fmt.Errorf("odd number of components in label string %q", labels)
+	}
+
+	for i := 0; i < len(components)-1; i += 2 {
+		name, value := components[i], components[i+1]
+		trimmedName := strings.TrimSuffix(name, Base64Suffix)
+		if !model.LabelNameRE.MatchString(trimmedName) ||
+			strings.HasPrefix(trimmedName, model.ReservedLabelPrefix) {
+			return nil, fmt.Errorf("improper label name %q", trimmedName)
+		}
+		if name == trimmedName {
+			result[name] = value
+			continue
+		}
+		decodedValue, err := decodeBase64(value)
+		if err != nil {
+			return nil, fmt.Errorf("invalid base64 encoding for label %s=%q: %v", trimmedName, value, err)
+		}
+		result[trimmedName] = decodedValue
+	}
+	return result, nil
 }
