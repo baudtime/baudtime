@@ -52,8 +52,12 @@ func (q *querier) Select(selectParams *SelectParams, matchers ...*labels.Matcher
 	selectRequest := &backendmsg.SelectRequest{
 		Mint:     q.mint,
 		Maxt:     q.maxt,
-		Interval: selectParams.Step,
 		Matchers: util.MatchersToProto(matchers),
+	}
+	if selectParams == nil {
+		selectRequest.Interval = q.maxt - q.mint
+	} else {
+		selectRequest.Interval = selectParams.Step
 	}
 	res, err := q.client.Select(q.ctx, selectRequest)
 	if err != nil {

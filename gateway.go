@@ -134,17 +134,25 @@ type httpResponse struct {
 
 func (gateway *Gateway) HttpInstantQuery(c *fasthttp.RequestCtx) {
 	exeHttpQuery(c, func() (interface{}, error) {
+		var httpArgs *fasthttp.Args
+
+		if util.YoloString(c.Method()) == "GET" {
+			httpArgs = c.QueryArgs()
+		} else {
+			httpArgs = c.PostArgs()
+		}
+
 		var ts, timeout, query string
 
-		if t := c.QueryArgs().Peek("time"); t != nil {
+		if t := httpArgs.Peek("time"); t != nil {
 			ts = string(t)
 		}
 
-		if to := c.QueryArgs().Peek("timeout"); to != nil {
+		if to := httpArgs.Peek("timeout"); to != nil {
 			timeout = string(to)
 		}
 
-		if q := c.QueryArgs().Peek("query"); q != nil {
+		if q := httpArgs.Peek("query"); q != nil {
 			query = string(q)
 		}
 
@@ -154,25 +162,33 @@ func (gateway *Gateway) HttpInstantQuery(c *fasthttp.RequestCtx) {
 
 func (gateway *Gateway) HttpRangeQuery(c *fasthttp.RequestCtx) {
 	exeHttpQuery(c, func() (interface{}, error) {
+		var httpArgs *fasthttp.Args
+
+		if util.YoloString(c.Method()) == "GET" {
+			httpArgs = c.QueryArgs()
+		} else {
+			httpArgs = c.PostArgs()
+		}
+
 		var start, end, step, timeout, query string
 
-		if arg := c.QueryArgs().Peek("start"); arg != nil {
+		if arg := httpArgs.Peek("start"); arg != nil {
 			start = string(arg)
 		}
 
-		if arg := c.QueryArgs().Peek("end"); arg != nil {
+		if arg := httpArgs.Peek("end"); arg != nil {
 			end = string(arg)
 		}
 
-		if arg := c.QueryArgs().Peek("step"); arg != nil {
+		if arg := httpArgs.Peek("step"); arg != nil {
 			step = string(arg)
 		}
 
-		if arg := c.QueryArgs().Peek("timeout"); arg != nil {
+		if arg := httpArgs.Peek("timeout"); arg != nil {
 			timeout = string(arg)
 		}
 
-		if arg := c.QueryArgs().Peek("query"); arg != nil {
+		if arg := httpArgs.Peek("query"); arg != nil {
 			query = string(arg)
 		}
 
@@ -180,6 +196,45 @@ func (gateway *Gateway) HttpRangeQuery(c *fasthttp.RequestCtx) {
 	})
 }
 
+//list matched series
+func (gateway *Gateway) HttpSeries(c *fasthttp.RequestCtx) {
+	exeHttpQuery(c, func() (interface{}, error) {
+		var httpArgs *fasthttp.Args
+
+		if util.YoloString(c.Method()) == "GET" {
+			httpArgs = c.QueryArgs()
+		} else {
+			httpArgs = c.PostArgs()
+		}
+
+		var (
+			matcherSets [][]*lb.Matcher
+			start, end  string
+		)
+
+		if arg := httpArgs.Peek("start"); arg != nil {
+			start = string(arg)
+		}
+
+		if arg := httpArgs.Peek("end"); arg != nil {
+			end = string(arg)
+		}
+
+		if matchs := httpArgs.PeekMulti("match[]"); len(matchs) > 0 {
+			for _, match := range matchs {
+				matchers, err := promql.ParseMetricSelector(util.YoloString(match))
+				if err != nil {
+					return nil, err
+				}
+				matcherSets = append(matcherSets, matchers)
+			}
+		}
+
+		return gateway.series(matcherSets, start, end)
+	})
+}
+
+//list values of the matched label
 func (gateway *Gateway) HttpLabelValues(c *fasthttp.RequestCtx) {
 	exeHttpQuery(c, func() (interface{}, error) {
 		name, ok := c.UserValue("name").(string)
@@ -359,6 +414,7 @@ func (gateway *Gateway) rangeQuery(startT, endT, step, timeout, query string) (*
 	if startT == "" {
 		return nil, errors.New("start time must be provided")
 	}
+
 	start, err := ParseTime(startT)
 	if err != nil {
 		return nil, err
@@ -426,6 +482,57 @@ func (gateway *Gateway) rangeQuery(startT, endT, step, timeout, query string) (*
 		ResultType: res.Value.Type(),
 		Result:     res.Value,
 	}, nil
+}
+
+func (gateway *Gateway) series(matcherSets [][]*lb.Matcher, startT, endT string) ([]lb.Labels, error) {
+	if len(matcherSets) == 0 {
+		return nil, errors.New("no match[] parameter provided")
+	}
+
+	if startT == "" {
+		return nil, errors.New("start time must be provided")
+	}
+
+	start, err := ParseTime(startT)
+	if err != nil {
+		return nil, err
+	}
+
+	if endT == "" {
+		return nil, errors.New("end time must be provided")
+	}
+
+	end, err := ParseTime(endT)
+	if err != nil {
+		return nil, err
+	}
+
+	q, err := gateway.Backend.Querier(context.Background(), ts.FromTime(start), ts.FromTime(end))
+	if err != nil {
+		return nil, err
+	}
+	defer q.Close()
+
+	var sets []backend.SeriesSet
+	for _, mset := range matcherSets {
+		s, err := q.Select(nil, mset...)
+		if err != nil {
+			return nil, err
+		}
+		sets = append(sets, s)
+	}
+
+	set := backend.NewMergeSeriesSet(sets)
+	metrics := []lb.Labels{}
+
+	for set.Next() {
+		metrics = append(metrics, set.At().Labels())
+	}
+	if set.Err() != nil {
+		return nil, set.Err()
+	}
+
+	return metrics, nil
 }
 
 func (gateway *Gateway) labelValues(name, constraint, timeout string) ([]string, error) {

@@ -223,7 +223,10 @@ func Run() {
 		router.POST("/api/v1/query", gateway.HttpInstantQuery)
 		router.GET("/api/v1/query_range", gateway.HttpRangeQuery)
 		router.POST("/api/v1/query_range", gateway.HttpRangeQuery)
+		router.GET("/api/v1/series", gateway.HttpSeries)
+		router.POST("/api/v1/series", gateway.HttpSeries)
 		router.GET("/api/v1/label/:name/values", gateway.HttpLabelValues)
+		router.POST("/api/v1/label/:name/values", gateway.HttpLabelValues)
 
 		for _, suffix := range []string{"", Base64Suffix} {
 			jobBase64Encoded := suffix == Base64Suffix
