@@ -31,7 +31,7 @@ import (
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	vars.Init("baudtime")
+	vars.Init()
 
 	if vars.CpuProfile != "" {
 		f, err := os.Create(vars.CpuProfile)

@@ -2,11 +2,9 @@ package vars
 
 import (
 	"flag"
-	"fmt"
 	"io"
 	"net"
 	"os"
-	"time"
 
 	osutil "github.com/baudtime/baudtime/util/os"
 	"github.com/go-kit/kit/log"
@@ -15,7 +13,7 @@ import (
 )
 
 var (
-	AppName        string
+	AppName        = "baudtime"
 	CpuProfile     string
 	MemProfile     string
 	ConfigFilePath string
@@ -25,18 +23,12 @@ var (
 	PageSize       = os.Getpagesize()
 )
 
-func Init(appName string) {
-	AppName = appName
-
-	logDir := flag.String("log-dir", "", "logs will be written to this directory")
-	logLevel := flag.String("log-level", "warn", "log level")
-	flag.StringVar(&ConfigFilePath, "config", appName+".toml", "configure file path")
+func Init() {
+	logFile := flag.String("log-file", "", "logs will be written to this file")
+	logLevel := flag.String("log-level", "info", "log level")
+	flag.StringVar(&ConfigFilePath, "config", AppName+".toml", "configure file path")
 	flag.StringVar(&CpuProfile, "cpu-prof", "", "write cpu profile to file")
 	flag.StringVar(&MemProfile, "mem-prof", "", "write memory profile to file")
-	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: %s [arguments] \n", os.Args[0])
-		flag.PrintDefaults()
-	}
 	flag.Parse()
 
 	var err error
@@ -54,12 +46,12 @@ func Init(appName string) {
 		panic("invalid ip address")
 	}
 
-	if len(*logDir) == 0 {
+	if *logFile == "" {
 		LogWriter = os.Stdout
 	} else {
 		LogWriter = &lumberjack.Logger{
-			Filename:   *logDir + "/" + appName + ".log",
-			MaxSize:    512, // megabytes
+			Filename:   *logFile,
+			MaxSize:    256, // megabytes
 			MaxBackups: 3,
 			MaxAge:     28, //days
 		}
@@ -75,12 +67,15 @@ func Init(appName string) {
 		levelOpt = level.AllowInfo()
 	case "debug":
 		levelOpt = level.AllowDebug()
+		if LogWriter != os.Stdout {
+			LogWriter = io.MultiWriter(LogWriter, os.Stdout)
+		}
 	default:
-		levelOpt = level.AllowWarn()
+		levelOpt = level.AllowInfo()
 	}
 
 	Logger = level.NewFilter(log.NewLogfmtLogger(LogWriter), levelOpt)
-	Logger = log.With(Logger, "time", log.TimestampFormat(time.Now, "2006-01-02T15:04:05.999999999"), "caller", log.DefaultCaller)
+	Logger = log.With(Logger, "time", log.DefaultTimestamp, "caller", log.DefaultCaller)
 
 	if err = LoadConfig(ConfigFilePath); err != nil {
 		panic(err)

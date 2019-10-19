@@ -26,9 +26,15 @@ type Jaegerlogger struct {
 }
 
 func (l *Jaegerlogger) Error(err string) {
-	level.Error(l.Logger).Log("err", err)
+	level.Error(l.Logger).Log("module", "jaeger", "err", err)
 }
 
 func (l *Jaegerlogger) Infof(msg string, args ...interface{}) {
-	level.Info(l.Logger).Log("msg", fmt.Sprintf(msg, args...))
+	level.Info(l.Logger).Log("module", "jaeger", "msg", fmt.Sprintf(msg, args...))
+}
+
+func Logger(module string, logger log.Logger) func(level func(logger log.Logger) log.Logger) log.Logger {
+	return func(level func(logger log.Logger) log.Logger) log.Logger {
+		return log.WithPrefix(level(logger), "module", module)
+	}
 }
