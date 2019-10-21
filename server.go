@@ -104,6 +104,8 @@ func (obs *tcpServerObserver) OnAccept(tcpConn *net.TCPConn) *tcp.ReadWriteLoop 
 			response.SetRaw(obs.gateway.InstantQuery(request))
 		case *gatewaymsg.RangeQueryRequest:
 			response.SetRaw(obs.gateway.RangeQuery(request))
+		case *gatewaymsg.SeriesLabelsRequest:
+			response.SetRaw(obs.gateway.SeriesLabels(request))
 		case *gatewaymsg.LabelValuesRequest:
 			response.SetRaw(obs.gateway.LabelValues(request))
 		case *backendmsg.AddRequest:
@@ -223,8 +225,8 @@ func Run() {
 		router.POST("/api/v1/query", gateway.HttpInstantQuery)
 		router.GET("/api/v1/query_range", gateway.HttpRangeQuery)
 		router.POST("/api/v1/query_range", gateway.HttpRangeQuery)
-		router.GET("/api/v1/series", gateway.HttpSeries)
-		router.POST("/api/v1/series", gateway.HttpSeries)
+		router.GET("/api/v1/series", gateway.HttpSeriesLabels)
+		router.POST("/api/v1/series", gateway.HttpSeriesLabels)
 		router.GET("/api/v1/label/:name/values", gateway.HttpLabelValues)
 		router.POST("/api/v1/label/:name/values", gateway.HttpLabelValues)
 

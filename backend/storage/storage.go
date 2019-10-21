@@ -37,8 +37,27 @@ import (
 	"go.uber.org/multierr"
 )
 
-func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, tIt *tm.TimestampIter) ([]*msg.Series, error) {
-	ms, err := ProtoToMatchers(matchers)
+func selectLabelsOnly(q tsdb.Querier, matchers []labels.Matcher) ([]*msg.Series, error) {
+	set, err := q.Select(matchers...)
+	if err != nil {
+		return nil, err
+	}
+
+	var series []*msg.Series
+
+	for set.Next() {
+		curSeries := set.At()
+		series = append(series, &msg.Series{
+			Labels: LabelsToProto(curSeries.Labels()),
+			Points: nil,
+		})
+	}
+
+	return series, nil
+}
+
+func selectVectors(q tsdb.Querier, matchers []labels.Matcher, tIt *tm.TimestampIter) ([]*msg.Series, error) {
+	set, err := q.Select(matchers...)
 	if err != nil {
 		return nil, err
 	}
@@ -46,23 +65,19 @@ func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, tIt *tm.Times
 	var (
 		series []*msg.Series
 		pIt    *BufferedSeriesIterator
+		points []msg.Point
 	)
-
-	set, err := q.Select(ms...)
-	if err != nil {
-		return nil, err
-	}
 
 	for set.Next() {
 		curSeries := set.At()
 
+		start := len(points)
 		if pIt == nil {
 			pIt = NewBufferIterator(curSeries.Iterator(), tm.DurationMilliSec(vars.Cfg.LookbackDelta))
 		} else {
 			pIt.Reset(curSeries.Iterator())
 		}
 
-		var points []msg.Point
 		for tIt.Next() {
 			ts := tIt.At()
 
@@ -89,13 +104,15 @@ func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, tIt *tm.Times
 				continue
 			}
 
-			points = append(points, msg.Point{V: v, T: t})
+			points = append(points, msg.Point{T: t, V: v})
 		}
 
-		series = append(series, &msg.Series{
-			Labels: LabelsToProto(curSeries.Labels()),
-			Points: points,
-		})
+		if len(points[start:]) > 0 {
+			series = append(series, &msg.Series{
+				Labels: LabelsToProto(curSeries.Labels()),
+				Points: points[start:],
+			})
+		}
 
 		tIt.Reset()
 	}
@@ -103,24 +120,21 @@ func selectVectors(q tsdb.Querier, matchers []*backendmsg.Matcher, tIt *tm.Times
 	return series, nil
 }
 
-func selectNoInterval(q tsdb.Querier, matchers []*backendmsg.Matcher, mint, maxt int64) ([]*msg.Series, error) {
-	ms, err := ProtoToMatchers(matchers)
+func selectNoInterval(q tsdb.Querier, matchers []labels.Matcher, mint, maxt int64) ([]*msg.Series, error) {
+	set, err := q.Select(matchers...)
 	if err != nil {
 		return nil, err
 	}
 
-	set, err := q.Select(ms...)
-	if err != nil {
-		return nil, err
-	}
-
-	series := make([]*msg.Series, 0)
-	allPoints := make([]msg.Point, 0)
+	var (
+		series []*msg.Series
+		points []msg.Point
+	)
 
 	for set.Next() {
-		start := len(allPoints)
 		curSeries := set.At()
 
+		start := len(points)
 		it := NewBufferIterator(curSeries.Iterator(), maxt-mint)
 
 		ok := it.Seek(maxt)
@@ -139,7 +153,7 @@ func selectNoInterval(q tsdb.Querier, matchers []*backendmsg.Matcher, mint, maxt
 			}
 			// Values in the buffer are guaranteed to be smaller than maxt.
 			if t >= mint {
-				allPoints = append(allPoints, msg.Point{T: t, V: v})
+				points = append(points, msg.Point{T: t, V: v})
 			}
 		}
 
@@ -147,14 +161,14 @@ func selectNoInterval(q tsdb.Querier, matchers []*backendmsg.Matcher, mint, maxt
 		if ok {
 			t, v := it.Values()
 			if t == maxt && !value.IsStaleNaN(v) {
-				allPoints = append(allPoints, msg.Point{T: t, V: v})
+				points = append(points, msg.Point{T: t, V: v})
 			}
 		}
 
-		if len(allPoints[start:]) > 0 {
+		if len(points[start:]) > 0 {
 			series = append(series, &msg.Series{
 				Labels: LabelsToProto(curSeries.Labels()),
-				Points: allPoints[start:],
+				Points: points[start:],
 			})
 		}
 	}
@@ -206,45 +220,51 @@ func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *back
 		span.Finish()
 	}()
 
+	matchers, err := ProtoToMatchers(request.Matchers)
+	if err != nil {
+		queryResponse.ErrorMsg = err.Error()
+		return queryResponse
+	}
+
+	var (
+		q      tsdb.Querier
+		series []*msg.Series
+	)
+
 	if (request.Mint == request.Maxt && request.Interval == 0) || (request.Mint < request.Maxt && request.Interval > 0) {
-		q, err := storage.DB.Querier(request.Mint-tm.DurationMilliSec(vars.Cfg.LookbackDelta), request.Maxt)
+		q, err = storage.DB.Querier(request.Mint-tm.DurationMilliSec(vars.Cfg.LookbackDelta), request.Maxt)
 		if err != nil {
 			queryResponse.ErrorMsg = err.Error()
 			return queryResponse
 		}
 		defer q.Close()
 
-		series, err := selectVectors(q, request.Matchers, tm.NewTimestampIter(request.Mint, request.Maxt, request.Interval))
-		if err != nil {
-			queryResponse.ErrorMsg = err.Error()
-			return queryResponse
-		}
-
-		queryResponse.Status = msg.StatusCode_Succeed
-		queryResponse.Series = series
-		return queryResponse
-	}
-
-	if request.Mint < request.Maxt && request.Interval == 0 {
-		q, err := storage.DB.Querier(request.Mint, request.Maxt)
+		series, err = selectVectors(q, matchers, tm.NewTimestampIter(request.Mint, request.Maxt, request.Interval))
+	} else if request.Mint < request.Maxt && request.Interval == 0 {
+		q, err = storage.DB.Querier(request.Mint, request.Maxt)
 		if err != nil {
 			queryResponse.ErrorMsg = err.Error()
 			return queryResponse
 		}
 		defer q.Close()
 
-		series, err := selectNoInterval(q, request.Matchers, request.Mint, request.Maxt)
-		if err != nil {
-			queryResponse.ErrorMsg = err.Error()
-			return queryResponse
+		if request.OnlyLabels {
+			series, err = selectLabelsOnly(q, matchers)
+		} else {
+			series, err = selectNoInterval(q, matchers, request.Mint, request.Maxt)
 		}
-
-		queryResponse.Status = msg.StatusCode_Succeed
-		queryResponse.Series = series
+	} else {
+		queryResponse.ErrorMsg = "parameter error"
 		return queryResponse
 	}
 
-	queryResponse.ErrorMsg = "parameter error"
+	if err != nil {
+		queryResponse.ErrorMsg = err.Error()
+		return queryResponse
+	}
+
+	queryResponse.Status = msg.StatusCode_Succeed
+	queryResponse.Series = series
 	return queryResponse
 }
 

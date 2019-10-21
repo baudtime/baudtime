@@ -28,6 +28,8 @@ const (
 	GatewayInstantQueryRequestType
 	GatewayRangeQueryRequestType
 	GatewayQueryResponseType
+	GatewaySeriesLabelsRequestType
+	GatewaySeriesLabelsResponseType
 	GatewayLabelValuesRequestType
 	//backend
 	BackendAddRequestType
@@ -63,6 +65,10 @@ func Type(m msg.Message) MsgType {
 		return GatewayRangeQueryRequestType
 	case *gateway.QueryResponse:
 		return GatewayQueryResponseType
+	case *gateway.SeriesLabelsRequest:
+		return GatewaySeriesLabelsRequestType
+	case *gateway.SeriesLabelsResponse:
+		return GatewaySeriesLabelsResponseType
 	case *gateway.LabelValuesRequest:
 		return GatewayLabelValuesRequestType
 	//backend
@@ -111,6 +117,10 @@ func Get(t MsgType) msg.Message {
 		return new(gateway.RangeQueryRequest)
 	case GatewayQueryResponseType:
 		return new(gateway.QueryResponse)
+	case GatewaySeriesLabelsRequestType:
+		return new(gateway.SeriesLabelsRequest)
+	case GatewaySeriesLabelsResponseType:
+		return new(gateway.SeriesLabelsResponse)
 	case GatewayLabelValuesRequestType:
 		return new(gateway.LabelValuesRequest)
 	//backend

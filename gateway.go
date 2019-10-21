@@ -86,6 +86,14 @@ func (gateway *Gateway) RangeQuery(request *gatewaymsg.RangeQueryRequest) *gatew
 	return &gatewaymsg.QueryResponse{Status: msg.StatusCode_Succeed, Result: string(queryRes)}
 }
 
+func (gateway *Gateway) SeriesLabels(request *gatewaymsg.SeriesLabelsRequest) *gatewaymsg.SeriesLabelsResponse {
+	labels, err := gateway.seriesLabels(request.Matches, request.Start, request.End, request.Timeout)
+	if err != nil {
+		return &gatewaymsg.SeriesLabelsResponse{Status: msg.StatusCode_Failed, ErrorMsg: err.Error()}
+	}
+	return &gatewaymsg.SeriesLabelsResponse{Status: msg.StatusCode_Succeed, Labels: labels}
+}
+
 func (gateway *Gateway) LabelValues(request *gatewaymsg.LabelValuesRequest) *msg.LabelValuesResponse {
 	values, err := gateway.labelValues(request.Name, request.Constraint, request.Timeout)
 	if err != nil {
@@ -196,8 +204,8 @@ func (gateway *Gateway) HttpRangeQuery(c *fasthttp.RequestCtx) {
 	})
 }
 
-//list matched series
-func (gateway *Gateway) HttpSeries(c *fasthttp.RequestCtx) {
+//list labels of matched series
+func (gateway *Gateway) HttpSeriesLabels(c *fasthttp.RequestCtx) {
 	exeHttpQuery(c, func() (interface{}, error) {
 		var httpArgs *fasthttp.Args
 
@@ -208,8 +216,8 @@ func (gateway *Gateway) HttpSeries(c *fasthttp.RequestCtx) {
 		}
 
 		var (
-			matcherSets [][]*lb.Matcher
-			start, end  string
+			matches             []string
+			start, end, timeout string
 		)
 
 		if arg := httpArgs.Peek("start"); arg != nil {
@@ -220,17 +228,17 @@ func (gateway *Gateway) HttpSeries(c *fasthttp.RequestCtx) {
 			end = string(arg)
 		}
 
-		if matchs := httpArgs.PeekMulti("match[]"); len(matchs) > 0 {
-			for _, match := range matchs {
-				matchers, err := promql.ParseMetricSelector(util.YoloString(match))
-				if err != nil {
-					return nil, err
-				}
-				matcherSets = append(matcherSets, matchers)
+		if arg := httpArgs.PeekMulti("match[]"); len(arg) > 0 {
+			for _, b := range arg {
+				matches = append(matches, util.YoloString(b))
 			}
 		}
 
-		return gateway.series(matcherSets, start, end)
+		if arg := c.QueryArgs().Peek("timeout"); arg != nil {
+			timeout = string(arg)
+		}
+
+		return gateway.seriesLabels(matches, start, end, timeout)
 	})
 }
 
@@ -484,7 +492,19 @@ func (gateway *Gateway) rangeQuery(startT, endT, step, timeout, query string) (*
 	}, nil
 }
 
-func (gateway *Gateway) series(matcherSets [][]*lb.Matcher, startT, endT string) ([]lb.Labels, error) {
+func (gateway *Gateway) seriesLabels(matches []string, startT, endT, timeout string) ([][]msg.Label, error) {
+	span := opentracing.StartSpan("seriesLabels")
+	defer span.Finish()
+
+	var matcherSets [][]*lb.Matcher
+	for _, match := range matches {
+		matchers, err := promql.ParseMetricSelector(match)
+		if err != nil {
+			return nil, err
+		}
+		matcherSets = append(matcherSets, matchers)
+	}
+
 	if len(matcherSets) == 0 {
 		return nil, errors.New("no match[] parameter provided")
 	}
@@ -507,15 +527,30 @@ func (gateway *Gateway) series(matcherSets [][]*lb.Matcher, startT, endT string)
 		return nil, err
 	}
 
-	q, err := gateway.Backend.Querier(context.Background(), ts.FromTime(start), ts.FromTime(end))
+	ctx := context.WithValue(context.Background(), "span", span)
+	if timeout != "" {
+		var cancel context.CancelFunc
+		to, err := ParseDuration(timeout)
+		if err != nil {
+			return nil, err
+		}
+
+		ctx, cancel = context.WithTimeout(ctx, to)
+		defer cancel()
+	}
+
+	q, err := gateway.Backend.Querier(ctx, ts.FromTime(start), ts.FromTime(end))
 	if err != nil {
 		return nil, err
 	}
 	defer q.Close()
 
-	var sets []backend.SeriesSet
-	for _, mset := range matcherSets {
-		s, err := q.Select(nil, mset...)
+	var (
+		params = &backend.SelectParams{OnlyLabels: true}
+		sets   []backend.SeriesSet
+	)
+	for _, matchers := range matcherSets {
+		s, err := q.Select(params, matchers...)
 		if err != nil {
 			return nil, err
 		}
@@ -523,10 +558,10 @@ func (gateway *Gateway) series(matcherSets [][]*lb.Matcher, startT, endT string)
 	}
 
 	set := backend.NewMergeSeriesSet(sets)
-	metrics := []lb.Labels{}
+	metrics := [][]msg.Label{}
 
 	for set.Next() {
-		metrics = append(metrics, set.At().Labels())
+		metrics = append(metrics, util.LabelsToProto(set.At().Labels()))
 	}
 	if set.Err() != nil {
 		return nil, set.Err()

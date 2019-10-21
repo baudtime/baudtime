@@ -58,8 +58,9 @@ type Appender interface {
 
 // SelectParams specifies parameters passed to data selections.
 type SelectParams struct {
-	Step int64  // Query step size in milliseconds.
-	Func string // String representation of surrounding function or aggregation.
+	Step       int64  // Query step size in milliseconds.
+	OnlyLabels bool   // Query meta data only, no samples, only labels
+	Func       string // String representation of surrounding function or aggregation.
 }
 
 // SeriesSet contains a set of series.

@@ -54,10 +54,9 @@ func (q *querier) Select(selectParams *SelectParams, matchers ...*labels.Matcher
 		Maxt:     q.maxt,
 		Matchers: util.MatchersToProto(matchers),
 	}
-	if selectParams == nil {
-		selectRequest.Interval = q.maxt - q.mint
-	} else {
+	if selectParams != nil {
 		selectRequest.Interval = selectParams.Step
+		selectRequest.OnlyLabels = selectParams.OnlyLabels
 	}
 	res, err := q.client.Select(q.ctx, selectRequest)
 	if err != nil {

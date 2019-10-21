@@ -26,13 +26,26 @@ type QueryResponse struct {
 	ErrorMsg string         `msg:"errorMsg"`
 }
 
-//msgp:tuple AddRequest
-type AddRequest struct {
-	Series []*msg.Series `msg:"series"`
+type SeriesLabelsRequest struct {
+	Matches []string `msg:"matches"`
+	Start   string   `msg:"start"`
+	End     string   `msg:"end"`
+	Timeout string   `msg:"timeout"`
+}
+
+type SeriesLabelsResponse struct {
+	Labels   [][]msg.Label  `msg:"labels"`
+	Status   msg.StatusCode `msg:"status"`
+	ErrorMsg string         `msg:"errorMsg"`
 }
 
 type LabelValuesRequest struct {
 	Name       string `msg:"name"`
 	Constraint string `msg:"constraint"`
 	Timeout    string `msg:"timeout"`
+}
+
+//msgp:tuple AddRequest
+type AddRequest struct {
+	Series []*msg.Series `msg:"series"`
 }

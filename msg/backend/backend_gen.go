@@ -724,6 +724,12 @@ func (z *SelectRequest) DecodeMsg(dc *msgp.Reader) (err error) {
 					}
 				}
 			}
+		case "onlyLB":
+			z.OnlyLabels, err = dc.ReadBool()
+			if err != nil {
+				err = msgp.WrapError(err, "OnlyLabels")
+				return
+			}
 		case "spanCtx":
 			z.SpanCtx, err = dc.ReadBytes(z.SpanCtx)
 			if err != nil {
@@ -743,9 +749,9 @@ func (z *SelectRequest) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *SelectRequest) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 5
+	// map header, size 6
 	// write "mint"
-	err = en.Append(0x85, 0xa4, 0x6d, 0x69, 0x6e, 0x74)
+	err = en.Append(0x86, 0xa4, 0x6d, 0x69, 0x6e, 0x74)
 	if err != nil {
 		return
 	}
@@ -798,6 +804,16 @@ func (z *SelectRequest) EncodeMsg(en *msgp.Writer) (err error) {
 			}
 		}
 	}
+	// write "onlyLB"
+	err = en.Append(0xa6, 0x6f, 0x6e, 0x6c, 0x79, 0x4c, 0x42)
+	if err != nil {
+		return
+	}
+	err = en.WriteBool(z.OnlyLabels)
+	if err != nil {
+		err = msgp.WrapError(err, "OnlyLabels")
+		return
+	}
 	// write "spanCtx"
 	err = en.Append(0xa7, 0x73, 0x70, 0x61, 0x6e, 0x43, 0x74, 0x78)
 	if err != nil {
@@ -814,9 +830,9 @@ func (z *SelectRequest) EncodeMsg(en *msgp.Writer) (err error) {
 // MarshalMsg implements msgp.Marshaler
 func (z *SelectRequest) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 5
+	// map header, size 6
 	// string "mint"
-	o = append(o, 0x85, 0xa4, 0x6d, 0x69, 0x6e, 0x74)
+	o = append(o, 0x86, 0xa4, 0x6d, 0x69, 0x6e, 0x74)
 	o = msgp.AppendInt64(o, z.Mint)
 	// string "maxt"
 	o = append(o, 0xa4, 0x6d, 0x61, 0x78, 0x74)
@@ -838,6 +854,9 @@ func (z *SelectRequest) MarshalMsg(b []byte) (o []byte, err error) {
 			}
 		}
 	}
+	// string "onlyLB"
+	o = append(o, 0xa6, 0x6f, 0x6e, 0x6c, 0x79, 0x4c, 0x42)
+	o = msgp.AppendBool(o, z.OnlyLabels)
 	// string "spanCtx"
 	o = append(o, 0xa7, 0x73, 0x70, 0x61, 0x6e, 0x43, 0x74, 0x78)
 	o = msgp.AppendBytes(o, z.SpanCtx)
@@ -910,6 +929,12 @@ func (z *SelectRequest) UnmarshalMsg(bts []byte) (o []byte, err error) {
 					}
 				}
 			}
+		case "onlyLB":
+			z.OnlyLabels, bts, err = msgp.ReadBoolBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "OnlyLabels")
+				return
+			}
 		case "spanCtx":
 			z.SpanCtx, bts, err = msgp.ReadBytesBytes(bts, z.SpanCtx)
 			if err != nil {
@@ -938,7 +963,7 @@ func (z *SelectRequest) Msgsize() (s int) {
 			s += z.Matchers[za0001].Msgsize()
 		}
 	}
-	s += 8 + msgp.BytesPrefixSize + len(z.SpanCtx)
+	s += 7 + msgp.BoolSize + 8 + msgp.BytesPrefixSize + len(z.SpanCtx)
 	return
 }
 
