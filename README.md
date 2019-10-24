@@ -2,27 +2,30 @@
 
 The goal of Baudtime is to make Prometheus more scalable, and provide extremely high write throughput.
 
-
 ## Features
 * Designed for high throughput via TCP pipeline
-* Horizontally scalable, you can send the metrics to multiple machines in one cluster and run "globally aggregated" across all data in a single place
+* Global querying view across all data shards, gateways are stateless and can be scaled up arbitrarily
+* Horizontally scalable, datanodes can be extended, you can send the metrics to multiple machines in one cluster and run "globally aggregated" across all data in a single place
 * Highly available, data is replicated between master and its slaves and master can be failovered automatically by promoting a slave to be the new master
-* Compatible with PromQL, so you can use functions over functions
+* Various strategies of load balancing over master and its slaves
 * Compatible with prometheus data model(time series defined by metric name and set of key/value dimensions)
-* Multi-language clients support, java and go
+* Compatible with PromQL and the query api of prometheus server, thus can be used with external tools such as Grafana
+* Compatible with the write api of prometheus pushgateway
+* Multi-language clients support, [java](https://github.com/baudtime/client_java) and go
+* Multi-protocol support, tcp and http
 * Flexible to deploy: single-process, deploy gateway and datanode separately or 2in1
 * Push model
-  
+* A [plugin-driven agent](https://github.com/baudtime/agent) for collecting & reporting metrics is provided
 
 ## Building from source
     $ go get github.com/baudtime/baudtime/cmd/baudtime
-    $ baudtime -log-level=info -log-dir=your_log_dir -config=your_config.toml
+    $ baudtime -log-level=info -log-file=your_log_file -config=your_config.toml
 
 ## Architecture, deployment
 ![architecture](https://raw.githubusercontent.com/baudtime/baudtime.github.io/master/baudtime.png)
 
 ## Performance
-Performance comparison of a single node(https://github.com/baudtime/baudtime/tree/master/cmd/comparison) were made using an i5-7200U CPU with 8GB of RAM on Archlinux.
+Performance [comparison of a single node](https://github.com/baudtime/baudtime/tree/master/cmd/comparison) were made using an i5-7200U CPU with 8GB of RAM on Archlinux.
 #### influxdb test:
 ```
 2019/08/27 13:34:34 write data
