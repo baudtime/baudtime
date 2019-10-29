@@ -24,11 +24,11 @@ var (
 )
 
 func Init() {
-	logFile := flag.String("log-file", "", "logs will be written to this file")
-	logLevel := flag.String("log-level", "info", "log level")
-	flag.StringVar(&ConfigFilePath, "config", AppName+".toml", "configure file path")
-	flag.StringVar(&CpuProfile, "cpu-prof", "", "write cpu profile to file")
-	flag.StringVar(&MemProfile, "mem-prof", "", "write memory profile to file")
+	logFile := flag.String("log.file", "", "logs will be written to this file")
+	logLevel := flag.String("log.level", "info", "log level")
+	flag.StringVar(&ConfigFilePath, "config.file", AppName+".toml", "configure file path")
+	flag.StringVar(&CpuProfile, "profile.cpu", "", "write cpu profile to file")
+	flag.StringVar(&MemProfile, "profile.mem", "", "write memory profile to file")
 	flag.Parse()
 
 	var err error

@@ -19,7 +19,7 @@ The goal of Baudtime is to make Prometheus more scalable, and provide extremely 
 
 ## Building from source
     $ go get github.com/baudtime/baudtime/cmd/baudtime
-    $ baudtime -log-level=info -log-file=your_log_file -config=your_config.toml
+    $ baudtime -log.level=info -log.file=your_log_file -config.file=your_config.toml
 
 ## Architecture, deployment
 ![architecture](https://raw.githubusercontent.com/baudtime/baudtime.github.io/master/baudtime.png)
