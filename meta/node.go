@@ -171,7 +171,10 @@ func (h *Heartbeat) Start() error {
 	}
 	h.client = cli
 
-	leaseResp, err := h.client.Grant(context.Background(), h.leaseTTL)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(vars.Cfg.Etcd.RWTimeout))
+	defer cancel()
+
+	leaseResp, err := h.client.Grant(ctx, h.leaseTTL)
 	if err != nil {
 		return errors.Wrap(err, "can't init heartbeat etcd lease")
 	}
