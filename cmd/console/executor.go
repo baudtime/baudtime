@@ -43,7 +43,18 @@ type executor struct {
 	closed      bool
 }
 
-func (e *executor) execCommand(cmd string, args ...string) error {
+func (e *executor) execCommand(args []string) error {
+	if len(args) == 0 {
+		return nil
+	}
+
+	cmd := args[0]
+	if len(args) > 1 {
+		args = args[1:]
+	} else {
+		args = nil
+	}
+
 	switch cmd {
 	case "help", "?":
 		printHelp(args)

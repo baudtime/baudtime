@@ -36,12 +36,27 @@ var (
 	ip             = flag.String("h", "127.0.0.1", "baudtime server ip (default 127.0.0.1)")
 	port           = flag.Int("p", 8088, "baudtime server port (default 8088)")
 	queryTimeout   = 120 * time.Second
+	reg, _         = regexp.Compile(`'.*?'|".*?"|\S+`)
 )
 
 var line *liner.State
 
 func main() {
 	flag.Parse()
+
+	args := flag.Args()
+	addr := fmt.Sprintf("%s:%d", *ip, *port)
+
+	exec := &executor{
+		addr:        addr,
+		queryEngine: promql.NewEngine(nil, 20, queryTimeout),
+	}
+	checkErr(exec.reconnect())
+
+	if len(args) > 0 {
+		checkErr(exec.execCommand(args))
+		return
+	}
 
 	line = liner.NewLiner()
 	defer line.Close()
@@ -50,52 +65,31 @@ func main() {
 
 	setAutoCompletionHandler()
 	loadHistory()
-
 	defer saveHistory()
 
-	var addr = fmt.Sprintf("%s:%d", *ip, *port)
-
-	reg, _ := regexp.Compile(`'.*?'|".*?"|\S+`)
 	prompt := fmt.Sprintf("%s> ", addr)
 
-	exec := &executor{
-		addr:        addr,
-		queryEngine: promql.NewEngine(nil, 20, queryTimeout),
-	}
-	err := exec.reconnect()
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
 	for !exec.closed {
-		cmd, err := line.Prompt(prompt)
-		if err != nil {
-			fmt.Printf("%s\n", err.Error())
-			return
+		cmdStr, err := line.Prompt(prompt)
+		checkErr(err)
+
+		err = exec.execCommand(parseCmdStr(cmdStr))
+		if checkConnBroken(err) {
+			fmt.Print("\n\nTry to reconnect...\n\n")
+			exec.reconnect()
+			exec.execCommand(parseCmdStr(cmdStr))
 		}
 
-		cmds := reg.FindAllString(cmd, -1)
-		if len(cmds) == 0 {
-			continue
-		} else {
-			line.AppendHistory(cmd)
-
-			args := make([]string, len(cmds[1:]))
-
-			for i := range args {
-				args[i] = strings.Trim(cmds[1+i], "\"'")
-			}
-
-			cmd := strings.ToLower(cmds[0])
-			err = exec.execCommand(cmd, args...)
-			if checkConnBroken(err) {
-				fmt.Print("\n\nTry to reconnect...\n\n")
-				exec.reconnect()
-				exec.execCommand(cmd, args...)
-			}
-		}
+		line.AppendHistory(cmdStr)
 	}
+}
+
+func parseCmdStr(cmdStr string) []string {
+	args := reg.FindAllString(cmdStr, -1)
+	for i := range args {
+		args[i] = strings.ToLower(strings.Trim(args[i], "\"'"))
+	}
+	return args
 }
 
 func printGenericHelp() {
@@ -163,4 +157,11 @@ func checkConnBroken(err error) bool {
 
 	_, ok := err.(net.Error)
 	return ok
+}
+
+func checkErr(err error) {
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
