@@ -26,13 +26,11 @@ type RouteInfo struct {
 }
 
 func (r *RouteInfo) Put(tickNO uint64, v []string) (evicted []uint64) {
+	r.Map.Store(tickNO, v)
+
 	if r.Timeline < tickNO {
 		r.Timeline = tickNO
-	}
 
-	_, loaded := r.Map.LoadOrStore(tickNO, v)
-
-	if !loaded {
 		tickNum := uint64(vars.Cfg.Gateway.Route.ShardGroupTTL / vars.Cfg.Gateway.Route.ShardGroupTickInterval)
 
 		r.Map.Range(func(tickNO, value interface{}) bool {

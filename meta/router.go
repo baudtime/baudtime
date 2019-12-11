@@ -51,7 +51,7 @@ func (r *router) GetShardIDByLabels(t time.Time, lbls []msg.Label, hash uint64, 
 
 	if len(shardGroup) == 0 {
 		if createIfAbsent && n <= tickNO(time.Now()) {
-			shardGroup, err = r.meta.creatShardGroup(n)
+			shardGroup, err = r.meta.createShardGroup(n)
 			if err != nil {
 				return "", err
 			}

@@ -59,7 +59,12 @@ func (m *meta) getShardGroup(tickNO uint64) ([]string, error) {
 	if found {
 		return shardGroup, nil
 	}
-	return m.getShardGroupFromEtcd(tickNO)
+	shardGroup, err := m.getShardGroupFromEtcd(tickNO)
+	if err != nil {
+		return nil, err
+	}
+	m.route.Put(tickNO, shardGroup)
+	return shardGroup, nil
 }
 
 func (m *meta) getShardGroupFromEtcd(tickNO uint64) ([]string, error) {
@@ -79,7 +84,7 @@ func (m *meta) getShardGroupFromEtcd(tickNO uint64) ([]string, error) {
 	return nil, err
 }
 
-func (m *meta) creatShardGroup(tickNO uint64) ([]string, error) {
+func (m *meta) createShardGroup(tickNO uint64) ([]string, error) {
 	var shardGroup []string
 
 	masters, err := GetMasters()
@@ -112,7 +117,9 @@ func (m *meta) creatShardGroup(tickNO uint64) ([]string, error) {
 
 func (m *meta) GetShard(shardID string) (shard *Shard, found bool) {
 	shards := (*map[string]*Shard)(atomic.LoadPointer(&m.shards))
-	shard, found = (*shards)[shardID]
+	if shards != nil {
+		shard, found = (*shards)[shardID]
+	}
 	return
 }
 
