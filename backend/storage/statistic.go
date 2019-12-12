@@ -25,17 +25,20 @@ import (
 )
 
 type OPStat struct {
-	SucceedSel   uint64
-	FailedSel    uint64
-	SucceedLVals uint64
-	FailedLVals  uint64
-	ReceivedAdd  uint64
-	SucceedAdd   uint64
-	FailedAdd    uint64
-	OutOfOrder   uint64
-	AmendSample  uint64
-	OutOfBounds  uint64
-	FailedCommit uint64
+	SucceedSel      uint64
+	FailedSel       uint64
+	SucceedLVals    uint64
+	FailedLVals     uint64
+	ReceivedAdd     uint64
+	SucceedAdd      uint64
+	FailedAdd       uint64
+	OutOfOrder      uint64
+	AmendSample     uint64
+	OutOfBounds     uint64
+	FailedCommit    uint64
+	LastOutOfOrder  int64
+	LastAmendSample int64
+	LastOutOfBounds int64
 }
 
 func (stat *OPStat) Reset() {
@@ -50,6 +53,9 @@ func (stat *OPStat) Reset() {
 	atomic.StoreUint64(&stat.AmendSample, 0)
 	atomic.StoreUint64(&stat.OutOfBounds, 0)
 	atomic.StoreUint64(&stat.FailedCommit, 0)
+	atomic.StoreInt64(&stat.LastOutOfOrder, 0)
+	atomic.StoreInt64(&stat.LastAmendSample, 0)
+	atomic.StoreInt64(&stat.LastOutOfBounds, 0)
 }
 
 type DBStat struct {
@@ -96,20 +102,23 @@ func (stat Stat) String() string {
 		buf = append(append(append(buf, "AmendSample: "...), strconv.FormatUint(stat.OpStat.AmendSample, 10)...), lnBreak)
 		buf = append(append(append(buf, "OutOfBounds: "...), strconv.FormatUint(stat.OpStat.OutOfBounds, 10)...), lnBreak)
 		buf = append(append(append(buf, "FailedCommit: "...), strconv.FormatUint(stat.OpStat.FailedCommit, 10)...), lnBreak)
+		buf = append(append(append(buf, "LastOutOfOrder: "...), formatTimestamp(stat.OpStat.LastOutOfOrder)...), lnBreak)
+		buf = append(append(append(buf, "LastAmendSample: "...), formatTimestamp(stat.OpStat.LastAmendSample)...), lnBreak)
+		buf = append(append(append(buf, "LastOutOfBounds: "...), formatTimestamp(stat.OpStat.LastOutOfBounds)...), lnBreak)
 		buf = append(append(append(buf, "SeriesNum: "...), strconv.FormatUint(stat.SeriesNum, 10)...), lnBreak)
 		buf = append(append(append(buf, "BlockNum: "...), strconv.Itoa(stat.BlockNum)...), lnBreak)
-		buf = append(append(append(buf, "HeadMinTime: "...), tsToString(stat.HeadMinTime)...), lnBreak)
-		buf = append(append(append(buf, "HeadMaxTime: "...), tsToString(stat.HeadMaxTime)...), lnBreak)
-		buf = append(append(append(buf, "HeadMinValidTime: "...), tsToString(stat.HeadMinValidTime)...), lnBreak)
-		buf = append(append(append(buf, "AppenderMinValidTime: "...), tsToString(stat.AppenderMinValidTime)...), lnBreak)
-		buf = append(append(append(buf, "LastRecvHb: "...), tsToString(stat.LastRecvHb)...), lnBreak)
-		buf = append(append(buf, "LastSendHb: "...), tsToString(stat.LastSendHb)...)
+		buf = append(append(append(buf, "HeadMinTime: "...), formatTimestamp(stat.HeadMinTime)...), lnBreak)
+		buf = append(append(append(buf, "HeadMaxTime: "...), formatTimestamp(stat.HeadMaxTime)...), lnBreak)
+		buf = append(append(append(buf, "HeadMinValidTime: "...), formatTimestamp(stat.HeadMinValidTime)...), lnBreak)
+		buf = append(append(append(buf, "AppenderMinValidTime: "...), formatTimestamp(stat.AppenderMinValidTime)...), lnBreak)
+		buf = append(append(append(buf, "LastRecvHb: "...), formatTimestamp(stat.LastRecvHb)...), lnBreak)
+		buf = append(append(buf, "LastSendHb: "...), formatTimestamp(stat.LastSendHb)...)
 	}
 
 	return util.YoloString(buf)
 }
 
-func tsToString(t int64) string {
+func formatTimestamp(t int64) string {
 	if t <= 0 {
 		return strconv.FormatInt(t, 10)
 	}

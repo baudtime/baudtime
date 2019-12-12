@@ -421,10 +421,13 @@ func (addReqHandler *AddReqHandler) HandleAddReq(request *backendmsg.AddRequest)
 				switch err {
 				case tsdb.ErrOutOfOrderSample:
 					atomic.AddUint64(&addReqHandler.opStat.OutOfOrder, 1)
+					atomic.StoreInt64(&addReqHandler.opStat.LastOutOfOrder, p.T)
 				case tsdb.ErrAmendSample:
 					atomic.AddUint64(&addReqHandler.opStat.AmendSample, 1)
+					atomic.StoreInt64(&addReqHandler.opStat.LastAmendSample, p.T)
 				case tsdb.ErrOutOfBounds:
 					atomic.AddUint64(&addReqHandler.opStat.OutOfBounds, 1)
+					atomic.StoreInt64(&addReqHandler.opStat.LastOutOfBounds, p.T)
 				default:
 					multiErr = multierr.Append(multiErr, err)
 				}
