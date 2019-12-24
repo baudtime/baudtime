@@ -89,7 +89,7 @@ func NewMap(shardCount int) *Map {
 }
 
 func (m *Map) getShard(key interface{}) *shard {
-	return m.shards[m.hash(key)&uint64(m.shardCount-1)]
+	return m.shards[hash(key)&uint64(m.shardCount-1)]
 }
 
 func (m *Map) Set(key, value interface{}) {
@@ -143,7 +143,7 @@ func (m *Map) ForEach(fn func(key, val interface{}) bool) bool {
 	return false
 }
 
-func (m *Map) hash(key interface{}) uint64 {
+func hash(key interface{}) uint64 {
 	if s, ok := key.(string); ok {
 		return xxhash.Sum64(util.YoloBytes(s))
 	}

@@ -59,7 +59,7 @@ type hasher struct {
 }
 
 func NewHasher() *hasher {
-	return &hasher{buf: make([]byte, 0, 1024)}
+	return &hasher{}
 }
 
 func (h *hasher) Hash(ls []msg.Label) uint64 {
@@ -73,4 +73,8 @@ func (h *hasher) Hash(ls []msg.Label) uint64 {
 	h.buf = h.buf[:0]
 
 	return v
+}
+
+func (h *hasher) Sum64(s string) uint64 {
+	return xxhash.Sum64(YoloBytes(s))
 }

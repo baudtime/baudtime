@@ -21,12 +21,14 @@ import (
 	"reflect"
 	"strings"
 	"sync/atomic"
+	"time"
 
+	"github.com/allegro/bigcache/v2"
 	"github.com/baudtime/baudtime/backend/storage/replication"
 	"github.com/baudtime/baudtime/meta"
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
-	"github.com/baudtime/baudtime/util/syn"
+	"github.com/baudtime/baudtime/util"
 	tm "github.com/baudtime/baudtime/util/time"
 	"github.com/baudtime/baudtime/vars"
 	"github.com/opentracing/opentracing-go"
@@ -186,13 +188,37 @@ type Storage struct {
 func New(db *tsdb.DB) *Storage {
 	opStat := new(OPStat)
 
+	symbolsK, err := bigcache.NewBigCache(bigcache.Config{
+		Shards:             1024,
+		LifeWindow:         24 * time.Hour,
+		MaxEntriesInWindow: 1000 * 10 * 60,
+		MaxEntrySize:       500,
+		Verbose:            false,
+		Hasher:             util.NewHasher(),
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	symbolsV, err := bigcache.NewBigCache(bigcache.Config{
+		Shards:             1 << 15,
+		LifeWindow:         24 * time.Hour,
+		MaxEntriesInWindow: 1000 * 10 * 60,
+		MaxEntrySize:       500,
+		Verbose:            false,
+		Hasher:             util.NewHasher(),
+	})
+	if err != nil {
+		panic(err)
+	}
+
 	return &Storage{
 		DB: db,
 		AddReqHandler: &AddReqHandler{
 			appender: db.Appender,
 			opStat:   opStat,
-			symbolsK: syn.NewMap(1024),
-			symbolsV: syn.NewMap(1 << 15),
+			symbolsK: symbolsK,
+			symbolsV: symbolsV,
 		},
 		ReplicateManager: replication.NewReplicateManager(db),
 		OpStat:           opStat,
@@ -375,8 +401,8 @@ func (storage *Storage) Info(detailed bool) (Stat, error) {
 type AddReqHandler struct {
 	appender func() tsdb.Appender
 	opStat   *OPStat
-	symbolsK *syn.Map
-	symbolsV *syn.Map
+	symbolsK *bigcache.BigCache
+	symbolsV *bigcache.BigCache
 }
 
 func (addReqHandler *AddReqHandler) HandleAddReq(request *backendmsg.AddRequest) error {
@@ -395,18 +421,18 @@ func (addReqHandler *AddReqHandler) HandleAddReq(request *backendmsg.AddRequest)
 				lset := make([]labels.Label, len(series.Labels))
 
 				for i, lb := range series.Labels {
-					if symbol, found := addReqHandler.symbolsK.Get(lb.Name); found {
-						lset[i].Name = symbol.(string)
+					if symbol, err := addReqHandler.symbolsK.Get(lb.Name); err == nil {
+						lset[i].Name = util.YoloString(symbol)
 					} else {
 						lset[i].Name = lb.Name
-						addReqHandler.symbolsK.Set(lset[i].Name, lset[i].Name)
+						addReqHandler.symbolsK.Set(lset[i].Name, util.YoloBytes(lset[i].Name))
 					}
 
-					if symbol, found := addReqHandler.symbolsV.Get(lb.Value); found {
-						lset[i].Value = symbol.(string)
+					if symbol, err := addReqHandler.symbolsV.Get(lb.Value); err == nil {
+						lset[i].Value = util.YoloString(symbol)
 					} else {
 						lset[i].Value = lb.Value
-						addReqHandler.symbolsV.Set(lset[i].Value, lset[i].Value)
+						addReqHandler.symbolsV.Set(lset[i].Value, util.YoloBytes(lset[i].Value))
 					}
 				}
 
