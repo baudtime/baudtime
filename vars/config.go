@@ -35,12 +35,13 @@ type RuleConfig struct {
 }
 
 type GatewayConfig struct {
-	ConnNumPerBackend int                `toml:"conn_num_per_backend"`
-	QueryStrategy     string             `toml:"query_strategy"`
-	Route             RouteConfig        `toml:"route"`
-	Appender          *AppenderConfig    `toml:"appender,omitempty"`
-	QueryEngine       *QueryEngineConfig `toml:"query_engine,omitempty"`
-	Rule              *RuleConfig        `toml:"rule,omitempty"`
+	ReadConnsPerBackend  int                `toml:"read_conns_per_backend"`
+	WriteConnsPerBackend int                `toml:"write_conns_per_backend"`
+	QueryStrategy        string             `toml:"query_strategy"`
+	Route                RouteConfig        `toml:"route"`
+	Appender             *AppenderConfig    `toml:"appender,omitempty"`
+	QueryEngine          *QueryEngineConfig `toml:"query_engine,omitempty"`
+	Rule                 *RuleConfig        `toml:"rule,omitempty"`
 }
 
 type TSDBConfig struct {

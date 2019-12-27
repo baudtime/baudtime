@@ -18,14 +18,15 @@ package client
 import (
 	"context"
 	"fmt"
-	"github.com/baudtime/baudtime/msg"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/baudtime/baudtime/msg"
 	"github.com/baudtime/baudtime/tcp"
 	"github.com/pkg/errors"
+	"go.uber.org/multierr"
 )
 
 var timeoutErr = errors.New("timeout")
@@ -150,9 +151,10 @@ func (c *Conn) isClosed() bool {
 }
 
 type Client struct {
-	name     string
-	opaque   uint64
-	connPool ConnPool
+	name       string
+	opaque     uint64
+	syncConns  ConnPool
+	asyncConns ConnPool
 }
 
 func NewGatewayClient(name string, addrProvider ServiceAddrProvider) *Client {
@@ -160,7 +162,12 @@ func NewGatewayClient(name string, addrProvider ServiceAddrProvider) *Client {
 
 	return &Client{
 		name: name,
-		connPool: &ServiceConnPool{
+		syncConns: &ServiceConnPool{
+			conns:    new(sync.Map),
+			addrProv: addrProvider,
+			new:      newConn,
+		},
+		asyncConns: &ServiceConnPool{
 			conns:    new(sync.Map),
 			addrProv: addrProvider,
 			new:      newConn,
@@ -168,15 +175,24 @@ func NewGatewayClient(name string, addrProvider ServiceAddrProvider) *Client {
 	}
 }
 
-func NewBackendClient(name string, address string, connNumPerHost int) *Client {
-	if connNumPerHost <= 0 {
-		connNumPerHost = 1
+func NewBackendClient(name string, address string, syncConnNumPerHost, asyncConnNumPerHost int) *Client {
+	if syncConnNumPerHost <= 0 {
+		syncConnNumPerHost = 1
+	}
+	if asyncConnNumPerHost <= 0 {
+		asyncConnNumPerHost = 1
 	}
 	return &Client{
 		name: name,
-		connPool: &HostConnPool{
-			conns:   make([]*Conn, connNumPerHost),
-			size:    connNumPerHost,
+		syncConns: &HostConnPool{
+			conns:   make([]*Conn, syncConnNumPerHost),
+			size:    syncConnNumPerHost,
+			address: address,
+			new:     newConn,
+		},
+		asyncConns: &HostConnPool{
+			conns:   make([]*Conn, asyncConnNumPerHost),
+			size:    asyncConnNumPerHost,
 			address: address,
 			new:     newConn,
 		},
@@ -194,7 +210,7 @@ func (cli *Client) SyncRequest(ctx context.Context, request msg.Message) (msg.Me
 		Message: request,
 	}
 
-	c, err := cli.connPool.GetConn()
+	c, err := cli.syncConns.GetConn()
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +221,7 @@ func (cli *Client) SyncRequest(ctx context.Context, request msg.Message) (msg.Me
 
 	err = c.write(baudReq)
 	if err != nil {
-		cli.connPool.Destroy(c)
+		cli.syncConns.Destroy(c)
 		return nil, err
 	}
 
@@ -229,7 +245,7 @@ func (cli *Client) AsyncRequest(request msg.Message, callback Callback) error {
 		Message: request,
 	}
 
-	c, err := cli.connPool.GetConn()
+	c, err := cli.asyncConns.GetConn()
 	if err != nil {
 		return err
 	}
@@ -244,7 +260,7 @@ func (cli *Client) AsyncRequest(request msg.Message, callback Callback) error {
 		if callback != nil {
 			c.futureTab.del(opaque)
 		}
-		cli.connPool.Destroy(c)
+		cli.asyncConns.Destroy(c)
 		return err
 	}
 
@@ -253,8 +269,7 @@ func (cli *Client) AsyncRequest(request msg.Message, callback Callback) error {
 }
 
 func (cli *Client) Close() (err error) {
-	err = cli.connPool.Close()
-	return
+	return multierr.Combine(cli.syncConns.Close(), cli.asyncConns.Close())
 }
 
 func (cli *Client) Name() string {

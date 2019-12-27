@@ -52,7 +52,7 @@ type clientFactory struct {
 func (factory *clientFactory) getClient(address string) (*client.Client, error) {
 	cli, found := factory.clients.Load(address)
 	if !found {
-		newCli := client.NewBackendClient("backend_cli_+"+address, address, vars.Cfg.Gateway.ConnNumPerBackend)
+		newCli := client.NewBackendClient("backend_cli_+"+address, address, vars.Cfg.Gateway.ReadConnsPerBackend, vars.Cfg.Gateway.WriteConnsPerBackend)
 		if cli, found = factory.clients.LoadOrStore(address, newCli); found {
 			_ = newCli.Close()
 		}

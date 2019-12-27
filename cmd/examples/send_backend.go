@@ -25,7 +25,7 @@ import (
 )
 
 func main() {
-	cli := client.NewBackendClient("name", "localhost:8088", 2)
+	cli := client.NewBackendClient("name", "localhost:8088", 0, 2)
 
 	var t int64
 

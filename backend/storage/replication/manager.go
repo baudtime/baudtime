@@ -333,7 +333,7 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfComm
 }
 
 func (mgr *ReplicateManager) syncHandshake(masterAddr string, slaveOfNoOne bool) (*backendmsg.SyncHandshakeAck, error) {
-	masterCli := client.NewBackendClient("rpl_s2m", masterAddr, 2)
+	masterCli := client.NewBackendClient("rpl_s2m", masterAddr, 1, 0)
 	defer masterCli.Close()
 
 	ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)

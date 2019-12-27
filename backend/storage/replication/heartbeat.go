@@ -53,7 +53,7 @@ type Heartbeat struct {
 
 func (h *Heartbeat) start() {
 	if h.masterCli == nil {
-		h.masterCli = client.NewBackendClient("rpl_s2m", h.masterAddr, 2)
+		h.masterCli = client.NewBackendClient("rpl_s2m", h.masterAddr, 3, 0)
 	}
 
 	heartbeat := &backendmsg.SyncHeartbeat{
