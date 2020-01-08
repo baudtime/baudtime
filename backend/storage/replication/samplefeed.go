@@ -16,279 +16,149 @@
 package replication
 
 import (
-	"encoding/binary"
-	"io"
-	"os"
-	"sync"
-	"sync/atomic"
-	"time"
-
-	"github.com/baudtime/baudtime/msg"
-	"github.com/baudtime/baudtime/tcp"
+	"github.com/baudtime/baudtime/tcp/client"
 	ts "github.com/baudtime/baudtime/util/time"
 	"github.com/baudtime/baudtime/vars"
-	"github.com/go-kit/kit/log/level"
-	"github.com/pkg/errors"
+	"io"
+	"net"
+	"os"
+	"runtime"
+	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
 )
 
 type sampleFeed struct {
-	h           *handOff
-	hmu         sync.Mutex
-	flushing    uint32
+	handOff     [][]byte
+	handOffSize int
+	handOffCap  int
+	handOffMtx  sync.Mutex
+
+	conns       client.ConnPool
+	connRefused uint32
+
 	closed      uint32
 	createdTime int64
 }
 
-func NewSampleFeed(addr string, size int64) *sampleFeed {
-	feed := &sampleFeed{
-		h: &handOff{
-			buf:  make([]byte, size),
-			size: size,
-			addr: addr,
-		},
+func NewSampleFeed(addr string, cap int) *sampleFeed {
+	return &sampleFeed{
+		handOff:     make([][]byte, 0, 1024),
+		handOffCap:  cap,
+		conns:       client.NewHostConnPool(vars.Cfg.Storage.Replication.SampleFeedConnsNum, addr, true),
 		createdTime: ts.FromTime(time.Now()),
 	}
-	feed.h.reconnect()
-
-	return feed
 }
 
 func (feed *sampleFeed) Write(msg []byte) (err error) {
-	if !feed.isClosed() {
-		buf := GetBytes()
-		binary.BigEndian.PutUint32(buf[:4], uint32(len(msg)))
-
-		feed.hmu.Lock()
-		if _, err = feed.h.Write(buf[:4]); err == nil {
-			_, err = feed.h.Write(msg)
-		}
-		feed.hmu.Unlock()
-
-		PutBytes(buf)
-
+	if feed.isClosed() {
+		return nil
 	}
+
+	if atomic.LoadUint32(&feed.connRefused) == 1 {
+		return feed.writeToHandOff(msg)
+	} else {
+		return feed.writeToConn(msg)
+	}
+}
+
+func (feed *sampleFeed) writeToHandOff(msg []byte) (err error) {
+	bak := make([]byte, len(msg))
+	copy(bak, msg)
+
+	feed.handOffMtx.Lock()
+	if feed.handOffSize+len(msg) > feed.handOffCap {
+		err = io.ErrShortWrite
+	} else {
+		feed.handOff = append(feed.handOff, bak)
+		feed.handOffSize += len(msg)
+	}
+	feed.handOffMtx.Unlock()
+
 	return
 }
 
+func (feed *sampleFeed) writeToConn(msg []byte) (err error) {
+	c, err := feed.conns.GetConn()
+	if err != nil {
+		if connRefused(err) {
+			atomic.StoreUint32(&feed.connRefused, 1)
+		}
+		return err
+	}
+
+	err = c.WriteMsg(msg)
+	if err != nil {
+		feed.conns.Destroy(c)
+		return err
+	}
+	return nil
+}
+
 func (feed *sampleFeed) FlushIfNeeded() {
-	if atomic.LoadUint32(&feed.flushing) == 1 {
+	if atomic.LoadUint32(&feed.connRefused) == 0 {
 		return
 	}
 
-	if feed.h.Buffered() <= 0 {
-		return
-	}
+	p := 0
 
-	level.Warn(vars.Logger).Log("msg", "flush feeds")
+	for {
+		feed.handOffMtx.Lock()
 
-	var toFlush *handOff
-
-	feed.hmu.Lock()
-	if feed.h.Buffered() > 0 {
-		toFlush = feed.h
-		feed.h = &handOff{
-			buf:  make([]byte, toFlush.size),
-			size: toFlush.size,
-			addr: toFlush.addr,
-		}
-		feed.h.reconnect()
-	}
-	feed.hmu.Unlock()
-
-	if toFlush != nil {
-		atomic.CompareAndSwapUint32(&feed.flushing, 0, 1)
-		defer atomic.StoreUint32(&feed.flushing, 0)
-
-		var err error
-
-		if toFlush.cErr != nil {
-			err = toFlush.reconnect()
-			level.Warn(vars.Logger).Log("msg", "reconnect to slave")
+		for i := 0; i < 512 && p < len(feed.handOff); i++ {
+			feed.writeToConn(feed.handOff[p])
+			feed.handOff[p] = nil
+			p++
 		}
 
-		batchSize := int64(os.Getpagesize())
+		if p == len(feed.handOff) {
+			feed.handOff = feed.handOff[:0]
+			atomic.StoreUint32(&feed.connRefused, 0)
 
-		for err == nil && toFlush.Buffered() > 0 {
-			err = toFlush.Flush(batchSize)
+			feed.handOffMtx.Unlock()
+			return
 		}
 
-		if err == nil {
-			toFlush.Close()
-		}
+		feed.handOffMtx.Unlock()
+
+		runtime.GC()
 	}
 }
 
 func (feed *sampleFeed) Close() {
 	if atomic.CompareAndSwapUint32(&feed.closed, 0, 1) {
-		if feed.h.Conn != nil {
-			feed.h.Conn.Close()
-		}
+		feed.conns.Close()
 	}
-	return
 }
 
 func (feed *sampleFeed) isClosed() bool {
 	return atomic.LoadUint32(&feed.closed) == 1
 }
 
-type handOff struct {
-	buf      []byte
-	head     int64
-	readable int64
-	size     int64
-	addr     string
-	cErr     error
-	*tcp.Conn
-	bytesWriten   uint64
-	bytesBuffered uint64
-}
-
-func (h *handOff) Buffered() int64 { return atomic.LoadInt64(&h.readable) }
-
-func (h *handOff) Write(p []byte) (nn int, err error) {
-	for len(p) > 0 {
-		var n int
-		if h.readable == 0 && h.cErr == nil && h.Conn != nil {
-			// Empty buffer and connection has no error.
-			// Write directly from p to avoid copy.
-			n, err = h.Conn.Write(p)
-			h.bytesWriten += uint64(n)
-			if err != nil {
-				h.cErr = err
-				return n, err
-			}
-		} else {
-			writeCapacity := h.size - h.readable
-			if writeCapacity <= 0 {
-				// full already
-				return nn, io.ErrShortWrite
-			}
-
-			if int64(len(p)) > writeCapacity {
-				err = io.ErrShortWrite
-				// leave err set and
-				// keep going, write what we can.
-			}
-
-			writeStart := (h.head + h.readable) % h.size
-			upperLim := min(writeStart+writeCapacity, h.size)
-
-			n = copy(h.buf[writeStart:upperLim], p)
-			h.readable += int64(n)
-
-			h.bytesBuffered += uint64(n)
-			//try flush???
-		}
-
-		nn += n
-		p = p[n:]
+func connRefused(err error) bool {
+	netErr, ok := err.(net.Error)
+	if !ok {
+		return false
 	}
 
-	return
-}
-
-func (h *handOff) Flush(size int64) error {
-	if h.cErr != nil {
-		return h.cErr
-	}
-	if h.Conn == nil {
-		return errors.New("conn not initialed")
-	}
-	if h.readable == 0 {
-		return nil
+	if netErr.Timeout() {
+		return false
 	}
 
-	if size > h.readable {
-		size = h.readable
+	opErr, ok := netErr.(*net.OpError)
+	if !ok {
+		return false
 	}
 
-	var n = 0
-	var err error
-
-	extent := h.head + size
-	if extent <= h.size {
-		n, err = h.Conn.Write(h.buf[h.head:extent])
-	} else {
-		n, err = h.Conn.Write(h.buf[h.head:h.size])
-		if int64(n) < size && err == nil {
-			nn := 0
-			nn, err = h.Conn.Write(h.buf[0:(extent % h.size)])
-			n += nn
+	switch t := opErr.Err.(type) {
+	case *net.DNSError:
+		return false
+	case *os.SyscallError:
+		if errno, ok := t.Err.(syscall.Errno); ok {
+			return errno == syscall.ECONNREFUSED
 		}
 	}
 
-	if n > 0 {
-		h.readable -= int64(n)
-		h.head = (h.head + int64(n)) % h.size
-	}
-
-	if err != nil {
-		h.cErr = err
-	}
-	return err
-}
-
-func (h *handOff) reconnect() error {
-	if h.Conn != nil {
-		h.Conn.Close()
-		h.Conn = nil
-	}
-
-	var msgCodec tcp.MsgCodec
-
-	closeWrite := &msg.ConnCtrl{msg.CtrlCode_CloseWrite}
-	buf := make([]byte, 1+binary.MaxVarintLen64+closeWrite.Msgsize())
-
-	n, err := msgCodec.Encode(tcp.Message{Message: closeWrite}, buf)
-	if err != nil {
-		h.cErr = err
-		return err
-	}
-
-	conn, err := tcp.Connect(h.addr)
-	if err != nil {
-		h.cErr = err
-		return err
-	}
-
-	err = conn.WriteMsg(buf[:n])
-	if err != nil {
-		h.cErr = err
-		return err
-	}
-
-	err = conn.Flush()
-	if err != nil {
-		h.cErr = err
-		return err
-	}
-
-	conn.CloseRead()
-
-	h.cErr = nil
-	h.Conn = conn
-
-	return nil
-}
-
-func min(a, b int64) int64 {
-	if a < b {
-		return a
-	} else {
-		return b
-	}
-}
-
-var bytesPool = &sync.Pool{}
-
-func GetBytes() []byte {
-	v := bytesPool.Get()
-	if v != nil {
-		return v.([]byte)
-	}
-	return make([]byte, 4)
-}
-
-func PutBytes(b []byte) {
-	bytesPool.Put(b)
+	return false
 }

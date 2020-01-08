@@ -94,7 +94,7 @@ type Conn struct {
 	futureTab  *futureTable
 }
 
-func newConn(address string) (*Conn, error) {
+func newConn(address string, writeOnly bool) (*Conn, error) {
 	c, err := net.DialTimeout("tcp4", address, 2*time.Second)
 	if err != nil {
 		return nil, err
@@ -132,21 +132,32 @@ func newConn(address string) (*Conn, error) {
 		cc.futureTab.RUnlock()
 	})
 
-	go cc.rwLoop.LoopRead()
 	go cc.rwLoop.LoopWrite()
+
+	if !writeOnly {
+		go cc.rwLoop.LoopRead()
+	} else {
+		closeWrite := &msg.ConnCtrl{msg.CtrlCode_CloseWrite}
+		cc.rwLoop.Write(tcp.Message{Message: closeWrite})
+		tc.CloseRead()
+	}
 
 	return cc, nil
 }
 
-func (c *Conn) write(msg tcp.Message) error {
+func (c *Conn) Write(msg tcp.Message) error {
 	return c.rwLoop.Write(msg)
 }
 
-func (c *Conn) close() error {
+func (c *Conn) WriteMsg(msg []byte) error {
+	return c.rwLoop.WriteMsg(msg)
+}
+
+func (c *Conn) Close() error {
 	return c.rwLoop.Exit()
 }
 
-func (c *Conn) isClosed() bool {
+func (c *Conn) Closed() bool {
 	return !c.rwLoop.IsRunning()
 }
 
@@ -161,41 +172,29 @@ func NewGatewayClient(name string, addrProvider ServiceAddrProvider) *Client {
 	addrProvider.Watch()
 
 	return &Client{
-		name: name,
-		syncConns: &ServiceConnPool{
-			conns:    new(sync.Map),
-			addrProv: addrProvider,
-			new:      newConn,
-		},
-		asyncConns: &ServiceConnPool{
-			conns:    new(sync.Map),
-			addrProv: addrProvider,
-			new:      newConn,
-		},
+		name:       name,
+		syncConns:  NewServiceConnPool(addrProvider, false),
+		asyncConns: NewServiceConnPool(addrProvider, false),
 	}
 }
 
 func NewBackendClient(name string, address string, syncConnNumPerHost, asyncConnNumPerHost int) *Client {
-	if syncConnNumPerHost <= 0 {
-		syncConnNumPerHost = 1
+	var syncConns, asyncConns ConnPool
+	if syncConnNumPerHost > 0 {
+		syncConns = NewHostConnPool(syncConnNumPerHost, address, false)
+	} else {
+		syncConns = dummyPool{}
 	}
-	if asyncConnNumPerHost <= 0 {
-		asyncConnNumPerHost = 1
+	if asyncConnNumPerHost > 0 {
+		asyncConns = NewHostConnPool(asyncConnNumPerHost, address, false)
+	} else {
+		asyncConns = dummyPool{}
 	}
+
 	return &Client{
-		name: name,
-		syncConns: &HostConnPool{
-			conns:   make([]*Conn, syncConnNumPerHost),
-			size:    syncConnNumPerHost,
-			address: address,
-			new:     newConn,
-		},
-		asyncConns: &HostConnPool{
-			conns:   make([]*Conn, asyncConnNumPerHost),
-			size:    asyncConnNumPerHost,
-			address: address,
-			new:     newConn,
-		},
+		name:       name,
+		syncConns:  syncConns,
+		asyncConns: asyncConns,
 	}
 }
 
@@ -219,7 +218,7 @@ func (cli *Client) SyncRequest(ctx context.Context, request msg.Message) (msg.Me
 	c.futureTab.add(opaque, f)
 	defer c.futureTab.del(opaque)
 
-	err = c.write(baudReq)
+	err = c.Write(baudReq)
 	if err != nil {
 		cli.syncConns.Destroy(c)
 		return nil, err
@@ -255,7 +254,7 @@ func (cli *Client) AsyncRequest(request msg.Message, callback Callback) error {
 		c.futureTab.add(opaque, f)
 	}
 
-	err = c.write(baudReq)
+	err = c.Write(baudReq)
 	if err != nil {
 		if callback != nil {
 			c.futureTab.del(opaque)

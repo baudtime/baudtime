@@ -58,8 +58,9 @@ type StatReportConfig struct {
 }
 
 type ReplicationConfig struct {
-	HandleOffSize     toml.Size     `toml:"handleoff_size"`
-	HeartbeatInterval toml.Duration `toml:"heartbeart_interval"`
+	SampleFeedConnsNum int           `toml:"sample_feed_conns_num"`
+	HandleOffSize      toml.Size     `toml:"handleoff_size"`
+	HeartbeatInterval  toml.Duration `toml:"heartbeart_interval"`
 }
 
 type StorageConfig struct {

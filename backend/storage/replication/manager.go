@@ -97,7 +97,7 @@ func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendmsg.SyncHeartbeat
 
 	feedI, found := mgr.sampleFeeds.Load(heartbeat.SlaveAddr)
 	if !found {
-		feed = NewSampleFeed(heartbeat.SlaveAddr, int64(Cfg.Storage.Replication.HandleOffSize))
+		feed = NewSampleFeed(heartbeat.SlaveAddr, int(Cfg.Storage.Replication.HandleOffSize))
 		mgr.sampleFeeds.Store(heartbeat.SlaveAddr, feed)
 	} else {
 		feed = feedI.(*sampleFeed)
@@ -265,7 +265,8 @@ func (mgr *ReplicateManager) HandleSyncHandshake(handshake *backendmsg.SyncHands
 	feed, found := mgr.sampleFeeds.Load(handshake.SlaveAddr)
 	if !found { //to be new slave
 		mgr.JoinCluster()
-		mgr.sampleFeeds.Store(handshake.SlaveAddr, NewSampleFeed(handshake.SlaveAddr, int64(Cfg.Storage.Replication.HandleOffSize)))
+		feed := NewSampleFeed(handshake.SlaveAddr, int(Cfg.Storage.Replication.HandleOffSize))
+		mgr.sampleFeeds.Store(handshake.SlaveAddr, feed)
 
 		mgr.db.DisableCompactions() //TODO multi slave
 
@@ -375,13 +376,6 @@ func (mgr *ReplicateManager) Master() (found bool, masterAddr string) {
 func (mgr *ReplicateManager) Slaves() (slaveAddrs []string) {
 	mgr.sampleFeeds.Range(func(key, value interface{}) bool {
 		slaveAddrs = append(slaveAddrs, key.(string))
-		level.Info(Logger).Log(
-			"slave", key.(string),
-			"buffered", value.(*sampleFeed).h.Buffered(),
-			"cErr", value.(*sampleFeed).h.cErr,
-			"allWriten", value.(*sampleFeed).h.bytesWriten,
-			"allBuffered", value.(*sampleFeed).h.bytesBuffered,
-		)
 		return true
 	})
 	return

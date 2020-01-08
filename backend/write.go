@@ -76,7 +76,7 @@ func (m seriesHashMap) del(hash uint64) {
 }
 
 const (
-	stripeSize = 1 << 14
+	stripeSize = 1 << 12
 	stripeMask = stripeSize - 1
 )
 

@@ -201,7 +201,7 @@ func New(db *tsdb.DB) *Storage {
 	}
 
 	symbolsV, err := bigcache.NewBigCache(bigcache.Config{
-		Shards:             1 << 15,
+		Shards:             1 << 16,
 		LifeWindow:         24 * time.Hour,
 		MaxEntriesInWindow: 1000 * 10 * 60,
 		MaxEntrySize:       500,

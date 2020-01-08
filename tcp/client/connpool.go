@@ -16,6 +16,7 @@
 package client
 
 import (
+	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 	"sync"
 	"sync/atomic"
@@ -31,9 +32,19 @@ type ConnPool interface {
 type ServiceConnPool struct {
 	conns     *sync.Map
 	addrProv  ServiceAddrProvider
-	new       func(address string) (*Conn, error)
+	new       func(address string, writeOnly bool) (*Conn, error)
+	writeOnly bool
 	onConnect func(*Conn)
 	onClose   func(*Conn)
+}
+
+func NewServiceConnPool(addrProvider ServiceAddrProvider, writeOnly bool) ConnPool {
+	return &ServiceConnPool{
+		conns:     new(sync.Map),
+		addrProv:  addrProvider,
+		new:       newConn,
+		writeOnly: writeOnly,
+	}
 }
 
 func (pool *ServiceConnPool) GetConn() (*Conn, error) {
@@ -44,7 +55,7 @@ func (pool *ServiceConnPool) GetConn() (*Conn, error) {
 
 	c, found := pool.conns.Load(address)
 	if !found {
-		newc, err := pool.new(address)
+		newc, err := pool.new(address, pool.writeOnly)
 		if err != nil {
 			pool.addrProv.ServiceDown(address)
 			return nil, err
@@ -54,7 +65,7 @@ func (pool *ServiceConnPool) GetConn() (*Conn, error) {
 		c, loaded = pool.conns.LoadOrStore(address, newc)
 
 		if loaded {
-			newc.close()
+			newc.Close()
 		} else {
 			if pool.onConnect != nil {
 				pool.onConnect(newc)
@@ -69,13 +80,13 @@ func (pool *ServiceConnPool) Destroy(c *Conn) error {
 	if pool.onClose != nil {
 		pool.onClose(c)
 	}
-	return c.close()
+	return c.Close()
 }
 
 func (pool *ServiceConnPool) Close() error {
 	var multiErr error
 	pool.conns.Range(func(key, value interface{}) bool {
-		err := value.(*Conn).close()
+		err := value.(*Conn).Close()
 		if err != nil {
 			multiErr = multierr.Append(multiErr, err)
 		}
@@ -93,20 +104,32 @@ type HostConnPool struct {
 	conns   []*Conn
 	address string
 
-	new       func(address string) (*Conn, error)
+	new       func(address string, writeOnly bool) (*Conn, error)
+	writeOnly bool
+
 	onConnect func(*Conn)
 	onClose   func(*Conn)
+}
+
+func NewHostConnPool(connNum int, address string, writeOnly bool) ConnPool {
+	return &HostConnPool{
+		conns:     make([]*Conn, connNum),
+		size:      connNum,
+		address:   address,
+		new:       newConn,
+		writeOnly: writeOnly,
+	}
 }
 
 func (pool *HostConnPool) GetConn() (*Conn, error) {
 	iter := atomic.AddUint64(&pool.iter, 1) % uint64(pool.size)
 	c := (*Conn)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&pool.conns[iter]))))
 
-	if c != nil && !c.isClosed() {
+	if c != nil && !c.Closed() {
 		return c, nil
 	}
 
-	newc, err := pool.new(pool.address)
+	newc, err := pool.new(pool.address, pool.writeOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +140,7 @@ func (pool *HostConnPool) GetConn() (*Conn, error) {
 	if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&pool.conns[iter])), unsafe.Pointer(c), unsafe.Pointer(newc)) {
 		c = newc
 	} else {
-		newc.close()
+		newc.Close()
 		c = (*Conn)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&pool.conns[iter]))))
 	}
 
@@ -128,17 +151,33 @@ func (pool *HostConnPool) Destroy(c *Conn) (err error) {
 	if pool.onClose != nil {
 		pool.onClose(c)
 	}
-	return c.close()
+	return c.Close()
 }
 
 func (pool *HostConnPool) Close() error {
 	var multiErr error
 	for _, c := range pool.conns {
-		if c != nil && !c.isClosed() {
-			if err := c.close(); err != nil {
+		if c != nil && !c.Closed() {
+			if err := c.Close(); err != nil {
 				multiErr = multierr.Append(multiErr, err)
 			}
 		}
 	}
 	return multiErr
+}
+
+var dummyErr error = errors.New("dummy conn, not real")
+
+type dummyPool struct {}
+
+func (pool dummyPool) GetConn() (*Conn, error) {
+	return nil, dummyErr
+}
+
+func (pool dummyPool) Destroy(c *Conn) (err error) {
+	return nil
+}
+
+func (pool dummyPool) Close() error {
+	return nil
 }

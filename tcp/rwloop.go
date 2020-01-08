@@ -151,6 +151,26 @@ func (loop *ReadWriteLoop) Write(msg Message) error {
 	return err
 }
 
+func (loop *ReadWriteLoop) WriteMsg(msg []byte) error {
+	if !loop.IsRunning() {
+		return errors.New("loop is not running")
+	}
+
+	if loop.WriteClosed() {
+		return errors.New("write is closed")
+	}
+
+	bytes := bytesPool.Get(len(msg)).([]byte)
+	n := copy(bytes, msg)
+
+	err := loop.out.Enqueue(bytes[:n])
+	if err != nil {
+		bytesPool.Put(bytes)
+	}
+
+	return err
+}
+
 func (loop *ReadWriteLoop) CloseWrite() (err error) {
 	if atomic.CompareAndSwapUint32(&loop.wrClosed, 0, 1) {
 		err = loop.conn.CloseWrite()
@@ -176,7 +196,6 @@ func (loop *ReadWriteLoop) ReadClosed() bool {
 
 func (loop *ReadWriteLoop) Exit() (err error) {
 	if atomic.CompareAndSwapUint32(&loop.closed, 0, 1) {
-		loop.conn.Flush()
 		err = loop.conn.Close()
 		loop.out.Close()
 

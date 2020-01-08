@@ -22,6 +22,7 @@ lookback_delta = "5s"
     heartbeart_interval = "30s"
     session_expire_ttl = "30s"
   [storage.replication]
+    sample_feed_conns_num = 16
     handleoff_size = "256m"
     heartbeart_interval = "30s"
 
