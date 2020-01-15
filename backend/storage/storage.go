@@ -66,8 +66,8 @@ func selectVectors(q tsdb.Querier, matchers []labels.Matcher, tIt *tm.TimestampI
 
 	var (
 		series []*msg.Series
-		pIt    *BufferedSeriesIterator
 		points []msg.Point
+		pIt    *BufferedSeriesIterator
 	)
 
 	for set.Next() {
@@ -131,13 +131,19 @@ func selectNoInterval(q tsdb.Querier, matchers []labels.Matcher, mint, maxt int6
 	var (
 		series []*msg.Series
 		points []msg.Point
+		it     *BufferedSeriesIterator
 	)
 
 	for set.Next() {
 		curSeries := set.At()
 
 		start := len(points)
-		it := NewBufferIterator(curSeries.Iterator(), maxt-mint)
+
+		if it == nil {
+			it = NewBufferIterator(curSeries.Iterator(), maxt-mint)
+		} else {
+			it.Reset(curSeries.Iterator())
+		}
 
 		ok := it.Seek(maxt)
 		if !ok {
