@@ -93,7 +93,7 @@ func (m *meta) createShardGroup(tickNO uint64) ([]string, error) {
 	}
 
 	for i := 0; i < len(masters); i++ {
-		if masters[i].DiskFree >= vars.Cfg.Gateway.Route.HostMinDGBiskLeft && masters[i].ShardID != "" {
+		if masters[i].DiskFree > 0 && masters[i].DiskFree >= vars.Cfg.Gateway.Route.HostMinDGBiskLeft && masters[i].ShardID != "" {
 			shardGroup = append(shardGroup, masters[i].ShardID)
 		}
 	}

@@ -198,7 +198,7 @@ func (loop *ReadWriteLoop) IsRunning() bool {
 func NewReadWriteLoop(conn *net.TCPConn, handle func(ctx context.Context, in Message, inBytes []byte) Message) *ReadWriteLoop {
 	return &ReadWriteLoop{
 		conn:   NewConn(conn),
-		out:    syn.NewQueue(1024 * 8),
+		out:    syn.NewQueue(1024 * 2),
 		handle: handle,
 	}
 }

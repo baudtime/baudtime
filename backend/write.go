@@ -125,6 +125,9 @@ func (app *appender) Flush() error {
 			app.series[i].del(k)
 		}
 	}
+	if len(app.toFlush.Series) == 0 {
+		return nil
+	}
 	err := app.client.Add(context.TODO(), &app.toFlush)
 
 	for _, s := range app.toFlush.Series {
