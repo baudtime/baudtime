@@ -24,13 +24,15 @@ import (
 	"time"
 
 	"github.com/philhofer/fwd"
+	"golang.org/x/time/rate"
 )
 
 type Conn struct {
 	*fwd.Reader
 	*fwd.Writer
-	raw  *net.TCPConn
-	wBuf []byte
+	raw         *net.TCPConn
+	wBuf        []byte
+	rateLimiter *rate.Limiter
 }
 
 func NewConn(c *net.TCPConn) *Conn {
@@ -50,6 +52,12 @@ func NewConn(c *net.TCPConn) *Conn {
 		raw:    c,
 		wBuf:   make([]byte, 4),
 	}
+}
+
+func newConnWithRate(c *net.TCPConn, rateLimiter *rate.Limiter) *Conn {
+	nc := NewConn(c)
+	nc.rateLimiter = rateLimiter // Do not juju rate limiter
+	return nc
 }
 
 func Connect(address string) (*Conn, error) {
@@ -80,6 +88,11 @@ func (c *Conn) ReadMsg() ([]byte, error) {
 	msgLen := int(binary.BigEndian.Uint32(buf))
 	if msgLen < 2 { // one byte is type, one byte is at least for opaque
 		return nil, io.ErrUnexpectedEOF
+	}
+
+	if c.rateLimiter != nil {
+		now := time.Now()
+		time.Sleep(c.rateLimiter.ReserveN(now, 4+msgLen).DelayFrom(now))
 	}
 
 	return c.Reader.Next(msgLen)

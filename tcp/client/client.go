@@ -112,7 +112,7 @@ func newConn(address string, writeOnly bool) (*Conn, error) {
 		nativeConn: tc,
 		futureTab:  &futureTable{futures: make(map[uint64]*Future)},
 	}
-	cc.rwLoop = tcp.NewReadWriteLoop(tc, func(ctx context.Context, in tcp.Message, b []byte) tcp.Message {
+	cc.rwLoop = tcp.NewReadWriteLoop(tc, nil, func(ctx context.Context, in tcp.Message, b []byte) tcp.Message {
 		if f, ok := cc.futureTab.get(in.GetOpaque()); ok {
 			f.ch <- in.GetRaw()
 			if f.callback != nil {

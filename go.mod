@@ -28,6 +28,7 @@ require (
 	go.etcd.io/etcd v0.0.0-20190917205325-a14579fbfb1a
 	go.uber.org/multierr v1.1.0
 	golang.org/x/text v0.3.2
+	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
 	google.golang.org/grpc v1.23.1
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )

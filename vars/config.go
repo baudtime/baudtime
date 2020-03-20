@@ -82,6 +82,7 @@ type Config struct {
 	MaxConn       int            `toml:"max_conn"`
 	NameSpace     string         `toml:"namespace,omitempty"`
 	LookbackDelta toml.Duration  `toml:"lookback_delta"`
+	InboundKBS    toml.Size      `toml:"inbound_kilo_bytes_per_sec"`
 	Etcd          EtcdConfig     `toml:"etcd"`
 	Gateway       *GatewayConfig `toml:"gateway,omitempty"`
 	Storage       *StorageConfig `toml:"storage,omitempty"`
