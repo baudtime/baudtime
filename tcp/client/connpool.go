@@ -20,6 +20,7 @@ import (
 	"go.uber.org/multierr"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 )
 
@@ -29,22 +30,30 @@ type ConnPool interface {
 	Close() error
 }
 
+type serviceConn struct {
+	c        *Conn
+	lastUsed time.Time
+}
+
 type ServiceConnPool struct {
-	conns     *sync.Map
-	addrProv  ServiceAddrProvider
-	new       func(address string, writeOnly bool) (*Conn, error)
-	writeOnly bool
-	onConnect func(*Conn)
-	onClose   func(*Conn)
+	conns           *sync.Map
+	addrProv        ServiceAddrProvider
+	new             func(address string, writeOnly bool) (*Conn, error)
+	writeOnly       bool
+	onConnect       func(*Conn)
+	onClose         func(*Conn)
+	stopIdleCheckCh chan struct{}
 }
 
 func NewServiceConnPool(addrProvider ServiceAddrProvider, writeOnly bool) ConnPool {
-	return &ServiceConnPool{
+	pool := &ServiceConnPool{
 		conns:     new(sync.Map),
 		addrProv:  addrProvider,
 		new:       newConn,
 		writeOnly: writeOnly,
 	}
+	pool.idleCheck()
+	return pool
 }
 
 func (pool *ServiceConnPool) GetConn() (*Conn, error) {
@@ -53,7 +62,7 @@ func (pool *ServiceConnPool) GetConn() (*Conn, error) {
 		return nil, err
 	}
 
-	c, found := pool.conns.Load(address)
+	sc, found := pool.conns.Load(address)
 	if !found {
 		newc, err := pool.new(address, pool.writeOnly)
 		if err != nil {
@@ -62,7 +71,7 @@ func (pool *ServiceConnPool) GetConn() (*Conn, error) {
 		}
 
 		var loaded bool
-		c, loaded = pool.conns.LoadOrStore(address, newc)
+		sc, loaded = pool.conns.LoadOrStore(address, &serviceConn{c: newc, lastUsed: time.Now()})
 
 		if loaded {
 			newc.Close()
@@ -71,8 +80,10 @@ func (pool *ServiceConnPool) GetConn() (*Conn, error) {
 				pool.onConnect(newc)
 			}
 		}
+	} else {
+		sc.(*serviceConn).lastUsed = time.Now()
 	}
-	return c.(*Conn), nil
+	return sc.(*serviceConn).c, nil
 }
 
 func (pool *ServiceConnPool) Destroy(c *Conn) error {
@@ -84,9 +95,10 @@ func (pool *ServiceConnPool) Destroy(c *Conn) error {
 }
 
 func (pool *ServiceConnPool) Close() error {
+	close(pool.stopIdleCheckCh)
 	var multiErr error
 	pool.conns.Range(func(key, value interface{}) bool {
-		err := value.(*Conn).Close()
+		err := value.(*serviceConn).c.Close()
 		if err != nil {
 			multiErr = multierr.Append(multiErr, err)
 		}
@@ -95,6 +107,30 @@ func (pool *ServiceConnPool) Close() error {
 	pool.conns = nil
 	pool.addrProv.StopWatch()
 	return multiErr
+}
+
+func (pool *ServiceConnPool) idleCheck() {
+	go func() {
+		maxIdle := 5 * time.Minute
+
+		ticker := time.NewTicker(maxIdle)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				pool.conns.Range(func(key, value interface{}) bool {
+					if time.Since(value.(*serviceConn).lastUsed) > maxIdle {
+						value.(*serviceConn).c.Close()
+						pool.conns.Delete(key)
+					}
+					return true
+				})
+			case <-pool.stopIdleCheckCh:
+				return
+			}
+		}
+	}()
 }
 
 type HostConnPool struct {
@@ -168,7 +204,7 @@ func (pool *HostConnPool) Close() error {
 
 var dummyErr error = errors.New("dummy conn, not real")
 
-type dummyPool struct {}
+type dummyPool struct{}
 
 func (pool dummyPool) GetConn() (*Conn, error) {
 	return nil, dummyErr
