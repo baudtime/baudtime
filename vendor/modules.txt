@@ -13,7 +13,7 @@ github.com/beorn7/perks/quantile
 github.com/buaazp/fasthttprouter
 # github.com/cespare/xxhash v1.1.0
 github.com/cespare/xxhash
-# github.com/cespare/xxhash/v2 v2.1.0
+# github.com/cespare/xxhash/v2 v2.1.1
 github.com/cespare/xxhash/v2
 # github.com/coreos/go-systemd v0.0.0-20180511133405-39ca1b05acc7
 github.com/coreos/go-systemd/journal
@@ -117,7 +117,7 @@ github.com/shirou/gopsutil/internal/common
 # github.com/stretchr/testify v1.4.0
 github.com/stretchr/testify/assert
 github.com/stretchr/testify/require
-# github.com/tinylib/msgp v1.1.0
+# github.com/tinylib/msgp v1.1.2
 github.com/tinylib/msgp/msgp
 # github.com/uber/jaeger-client-go v2.19.0+incompatible
 github.com/uber/jaeger-client-go
@@ -141,7 +141,7 @@ github.com/uber/jaeger-client-go/utils
 github.com/uber/jaeger-lib/metrics
 # github.com/valyala/bytebufferpool v1.0.0
 github.com/valyala/bytebufferpool
-# github.com/valyala/fasthttp v1.5.0
+# github.com/valyala/fasthttp v1.10.0
 github.com/valyala/fasthttp
 github.com/valyala/fasthttp/fasthttpadaptor
 github.com/valyala/fasthttp/fasthttputil

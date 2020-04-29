@@ -23,7 +23,6 @@ import (
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/promql"
-	"github.com/baudtime/baudtime/util"
 	ts "github.com/baudtime/baudtime/util/time"
 	"github.com/pkg/errors"
 	"strconv"
@@ -201,24 +200,28 @@ func (e *executor) execCommand(args []string) error {
 			return err
 		}
 	case "labelvals":
-		if len(args) == 0 {
+		if len(args) != 3 {
 			printCommandHelp(cmd)
 			return nil
 		}
 
-		command := &backendmsg.LabelValuesRequest{
-			Name: args[0],
-		}
-		if len(args) > 1 {
-			matchers, err := promql.ParseMetricSelector(args[1])
-			if err != nil {
-				fmt.Print(err)
-				return err
-			}
-			command.Matchers = util.MatchersToProto(matchers)
+		mint, err := strconv.ParseInt(args[1], 10, 0)
+		if err != nil {
+			fmt.Print(err)
+			return err
 		}
 
-		return e.execComand(command)
+		maxt, err := strconv.ParseInt(args[2], 10, 0)
+		if err != nil {
+			fmt.Print(err)
+			return err
+		}
+
+		return e.execComand(&backendmsg.LabelValuesRequest{
+			Name: args[0],
+			Mint: mint,
+			Maxt: maxt,
+		})
 	default:
 		fmt.Println("Unkown Command")
 	}

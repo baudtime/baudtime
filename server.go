@@ -37,7 +37,6 @@ import (
 	. "github.com/baudtime/baudtime/vars"
 	"github.com/buaazp/fasthttprouter"
 	"github.com/go-kit/kit/log/level"
-	"github.com/prometheus/tsdb"
 	"github.com/valyala/fasthttp"
 	"github.com/valyala/fasthttp/pprofhandler"
 	"golang.org/x/time/rate"
@@ -149,6 +148,7 @@ func (obs *tcpServerObserver) OnAccept(tcpConn *net.TCPConn) *tcp.ReadWriteLoop 
 
 func Run() {
 	var (
+		err          error
 		localStorage *storage.Storage
 		heartbeat    *meta.Heartbeat
 		gateway      *Gateway
@@ -157,24 +157,12 @@ func Run() {
 	)
 
 	if Cfg.Storage != nil {
-		walSegmentSize := 0
-		if !Cfg.Storage.TSDB.EnableWal {
-			walSegmentSize = -1
-		}
-
-		db, err := tsdb.Open(Cfg.Storage.TSDB.Path, Logger, nil, &tsdb.Options{
-			WALSegmentSize:         walSegmentSize,
-			RetentionDuration:      uint64(Cfg.Storage.TSDB.RetentionDuration) / 1e6,
-			BlockRanges:            Cfg.Storage.TSDB.BlockRanges,
-			NoLockfile:             Cfg.Storage.TSDB.NoLockfile,
-			AllowOverlappingBlocks: true,
-		})
+		localStorage, err = storage.Open(Cfg.Storage)
 		if err != nil {
 			level.Error(Logger).Log("msg", "failed to open db", "err", err)
 			return
 		}
 
-		localStorage = storage.New(db)
 		heartbeat = meta.NewHeartbeat(time.Duration(Cfg.Storage.StatReport.SessionExpireTTL), time.Duration(Cfg.Storage.StatReport.HeartbeartInterval), func() (meta.Node, error) {
 			stat, err := localStorage.Info(false)
 			return stat.Node, err

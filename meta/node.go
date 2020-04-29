@@ -46,7 +46,7 @@ type Node struct {
 	once       sync.Once `json:"-"`
 }
 
-func (node Node) Addr() string {
+func (node *Node) Addr() string {
 	node.once.Do(func() {
 		if node.IP != "" && node.Port != "" {
 			var b strings.Builder
@@ -59,7 +59,7 @@ func (node Node) Addr() string {
 	return node.addr
 }
 
-func (node Node) MayOnline() bool {
+func (node *Node) MayOnline() bool {
 	addr := node.Addr()
 	if util.Ping(addr) {
 		return true

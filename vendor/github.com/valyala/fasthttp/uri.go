@@ -36,7 +36,7 @@ var uriPool = &sync.Pool{
 //
 // URI instance MUST NOT be used from concurrently running goroutines.
 type URI struct {
-	noCopy noCopy
+	noCopy noCopy //nolint:unused,structcheck
 
 	pathOriginal []byte
 	scheme       []byte
@@ -48,13 +48,20 @@ type URI struct {
 	queryArgs       Args
 	parsedQueryArgs bool
 
+	// Path values are sent as-is without normalization
+	//
+	// Disabled path normalization may be useful for proxying incoming requests
+	// to servers that are expecting paths to be forwarded as-is.
+	//
+	// By default path values are normalized, i.e.
+	// extra slashes are removed, special characters are encoded.
+	DisablePathNormalizing bool
+
 	fullURI    []byte
 	requestURI []byte
 
 	username []byte
 	password []byte
-
-	h *RequestHeader
 }
 
 // CopyTo copies uri contents to dst.
@@ -71,10 +78,10 @@ func (u *URI) CopyTo(dst *URI) {
 
 	u.queryArgs.CopyTo(&dst.queryArgs)
 	dst.parsedQueryArgs = u.parsedQueryArgs
+	dst.DisablePathNormalizing = u.DisablePathNormalizing
 
 	// fullURI and requestURI shouldn't be copied, since they are created
 	// from scratch on each FullURI() and RequestURI() call.
-	dst.h = u.h
 }
 
 // Hash returns URI hash, i.e. qwe of http://aaa.com/foo/bar?baz=123#qwe .
@@ -215,25 +222,19 @@ func (u *URI) Reset() {
 	u.host = u.host[:0]
 	u.queryArgs.Reset()
 	u.parsedQueryArgs = false
+	u.DisablePathNormalizing = false
 
 	// There is no need in u.fullURI = u.fullURI[:0], since full uri
 	// is calculated on each call to FullURI().
 
 	// There is no need in u.requestURI = u.requestURI[:0], since requestURI
 	// is calculated on each call to RequestURI().
-
-	u.h = nil
 }
 
 // Host returns host part, i.e. aaa.com of http://aaa.com/foo/bar?baz=123#qwe .
 //
 // Host is always lowercased.
 func (u *URI) Host() []byte {
-	if len(u.host) == 0 && u.h != nil {
-		u.host = append(u.host[:0], u.h.Host()...)
-		lowercaseBytes(u.host)
-		u.h = nil
-	}
 	return u.host
 }
 
@@ -256,23 +257,23 @@ func (u *URI) SetHostBytes(host []byte) {
 //
 // uri may contain e.g. RequestURI without scheme and host if host is non-empty.
 func (u *URI) Parse(host, uri []byte) {
-	u.parse(host, uri, nil)
+	u.parse(host, uri, false)
 }
 
-func (u *URI) parseQuick(uri []byte, h *RequestHeader, isTLS bool) {
-	u.parse(nil, uri, h)
+func (u *URI) parse(host, uri []byte, isTLS bool) {
+	u.Reset()
+
+	if len(host) == 0 || bytes.Contains(uri, strColonSlashSlash) {
+		scheme, newHost, newURI := splitHostURI(host, uri)
+		u.scheme = append(u.scheme, scheme...)
+		lowercaseBytes(u.scheme)
+		host = newHost
+		uri = newURI
+	}
+
 	if isTLS {
 		u.scheme = append(u.scheme[:0], strHTTPS...)
 	}
-}
-
-func (u *URI) parse(host, uri []byte, h *RequestHeader) {
-	u.Reset()
-	u.h = h
-
-	scheme, host, uri := splitHostURI(host, uri)
-	u.scheme = append(u.scheme, scheme...)
-	lowercaseBytes(u.scheme)
 
 	if n := bytes.Index(host, strAt); n >= 0 {
 		auth := host[:n]
@@ -387,17 +388,18 @@ func normalizePath(dst, src []byte) []byte {
 
 // RequestURI returns RequestURI - i.e. URI without Scheme and Host.
 func (u *URI) RequestURI() []byte {
-	dst := appendQuotedPath(u.requestURI[:0], u.Path())
+	var dst []byte
+	if u.DisablePathNormalizing {
+		dst = append(u.requestURI[:0], u.PathOriginal()...)
+	} else {
+		dst = appendQuotedPath(u.requestURI[:0], u.Path())
+	}
 	if u.queryArgs.Len() > 0 {
 		dst = append(dst, '?')
 		dst = u.queryArgs.AppendBytes(dst)
 	} else if len(u.queryString) > 0 {
 		dst = append(dst, '?')
 		dst = append(dst, u.queryString...)
-	}
-	if len(u.hash) > 0 {
-		dst = append(dst, '#')
-		dst = append(dst, u.hash...)
 	}
 	u.requestURI = dst
 	return u.requestURI
@@ -513,7 +515,12 @@ func (u *URI) FullURI() []byte {
 // AppendBytes appends full uri to dst and returns the extended dst.
 func (u *URI) AppendBytes(dst []byte) []byte {
 	dst = u.appendSchemeHost(dst)
-	return append(dst, u.RequestURI()...)
+	dst = append(dst, u.RequestURI()...)
+	if len(u.hash) > 0 {
+		dst = append(dst, '#')
+		dst = append(dst, u.hash...)
+	}
+	return dst
 }
 
 func (u *URI) appendSchemeHost(dst []byte) []byte {

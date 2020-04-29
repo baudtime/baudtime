@@ -20,6 +20,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -94,13 +95,23 @@ func (m *meta) createShardGroup(tickNO uint64) ([]string, error) {
 
 	for i := 0; i < len(masters); i++ {
 		if masters[i].DiskFree > 0 && masters[i].DiskFree >= vars.Cfg.Gateway.Route.HostMinDGBiskLeft && masters[i].ShardID != "" {
-			shardGroup = append(shardGroup, masters[i].ShardID)
+			found := false
+			for _, shardID := range shardGroup {
+				if shardID == masters[i].ShardID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				shardGroup = append(shardGroup, masters[i].ShardID)
+			}
 		}
 	}
 
 	if len(shardGroup) == 0 {
 		return nil, errors.Errorf("not enough shards to init %v", tickNO)
 	}
+	sort.Strings(shardGroup)
 
 	key := routeInfoPrefix() + strconv.FormatUint(tickNO, 10)
 	err = etcdPut(key, shardGroup, clientv3.NoLease)
@@ -383,13 +394,13 @@ func FailoverIfNeeded(shardID string) {
 
 		slaveConn, err := tcp.Connect(chosen.Addr())
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to connect to slave")
 		}
 		defer slaveConn.Close()
 
 		err = slaveConn.WriteMsg(slaveOfReqBytes[:n])
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to send slave of no one")
 		}
 
 		level.Warn(vars.Logger).Log("msg", "failover triggered", "shard", shardID, "chosen", chosen.Addr())

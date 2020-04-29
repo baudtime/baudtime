@@ -48,3 +48,9 @@ func HandleSignals(f func(os.Signal) bool) {
 		}
 	}
 }
+
+func SetRlimit(i int, r *syscall.Rlimit) {
+	if err := syscall.Setrlimit(i, r); err != nil {
+		panic(err)
+	}
+}

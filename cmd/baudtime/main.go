@@ -20,9 +20,11 @@ import (
 	"runtime"
 	"runtime/debug"
 	"runtime/pprof"
+	"syscall"
 
 	"github.com/baudtime/baudtime"
 	"github.com/baudtime/baudtime/util"
+	osutil "github.com/baudtime/baudtime/util/os"
 	"github.com/baudtime/baudtime/vars"
 	"github.com/go-kit/kit/log/level"
 	"github.com/opentracing/opentracing-go"
@@ -31,6 +33,7 @@ import (
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
+	osutil.SetRlimit(syscall.RLIMIT_NOFILE, &syscall.Rlimit{102400, 102400})
 	vars.Init()
 
 	if vars.CpuProfile != "" {

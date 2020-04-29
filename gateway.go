@@ -95,7 +95,7 @@ func (gateway *Gateway) SeriesLabels(request *gatewaymsg.SeriesLabelsRequest) *g
 }
 
 func (gateway *Gateway) LabelValues(request *gatewaymsg.LabelValuesRequest) *msg.LabelValuesResponse {
-	values, err := gateway.labelValues(request.Name, request.Constraint, request.Timeout)
+	values, err := gateway.labelValues(request.Name, request.Matches, request.Start, request.End, request.Timeout)
 	if err != nil {
 		return &msg.LabelValuesResponse{Status: msg.StatusCode_Failed, ErrorMsg: err.Error()}
 	}
@@ -250,16 +250,38 @@ func (gateway *Gateway) HttpLabelValues(c *fasthttp.RequestCtx) {
 			return nil, errors.New("label name must be provided")
 		}
 
-		var constraint, timeout string
-		if arg := c.QueryArgs().Peek("constraint"); arg != nil {
-			constraint = string(arg)
+		var httpArgs *fasthttp.Args
+
+		if util.YoloString(c.Method()) == "GET" {
+			httpArgs = c.QueryArgs()
+		} else {
+			httpArgs = c.PostArgs()
+		}
+
+		var (
+			matches             []string
+			start, end, timeout string
+		)
+
+		if arg := httpArgs.Peek("start"); arg != nil {
+			start = string(arg)
+		}
+
+		if arg := httpArgs.Peek("end"); arg != nil {
+			end = string(arg)
+		}
+
+		if arg := httpArgs.PeekMulti("match[]"); len(arg) > 0 {
+			for _, b := range arg {
+				matches = append(matches, util.YoloString(b))
+			}
 		}
 
 		if arg := c.QueryArgs().Peek("timeout"); arg != nil {
 			timeout = string(arg)
 		}
 
-		return gateway.labelValues(name, constraint, timeout)
+		return gateway.labelValues(name, matches, start, end, timeout)
 	})
 }
 
@@ -570,35 +592,36 @@ func (gateway *Gateway) seriesLabels(matches []string, startT, endT, timeout str
 	return metrics, nil
 }
 
-func (gateway *Gateway) labelValues(name, constraint, timeout string) ([]string, error) {
-	span := opentracing.StartSpan("labelValues", opentracing.Tag{"name", name}, opentracing.Tag{"constraint", constraint})
+func (gateway *Gateway) labelValues(name string, matches []string, startT, endT, timeout string) ([]string, error) {
+	span := opentracing.StartSpan("labelValues", opentracing.Tag{"name", name},
+		opentracing.Tag{"startT", startT}, opentracing.Tag{"endT", endT})
 	defer span.Finish()
 
-	var (
-		mint, maxt int64 = math.MinInt64, math.MaxInt64
-		matchers   []*lb.Matcher
-	)
-
-	if constraint != "" {
-		now := time.Now()
-
-		expr, err := promql.ParseExpr(constraint)
+	var matchers []*lb.Matcher
+	for _, match := range matches {
+		ms, err := promql.ParseMetricSelector(match)
 		if err != nil {
 			return nil, err
 		}
+		matchers = append(matchers, ms...)
+	}
 
-		switch selector := expr.(type) {
-		case *promql.VectorSelector:
-			mint = ts.FromTime(now.Add(-selector.Offset))
-			maxt = mint
-			matchers = selector.LabelMatchers
-		case *promql.MatrixSelector:
-			mint = ts.FromTime(now.Add(-selector.Offset - selector.Range))
-			maxt = ts.FromTime(now.Add(-selector.Offset))
-			matchers = selector.LabelMatchers
-		default:
-			return nil, errors.Errorf("invalid expression type %s for constraint, must be Scalar or instant Vector", expr.Type())
+	var mint, maxt int64 = math.MinInt64, math.MaxInt64
+
+	if startT != "" {
+		start, err := ParseTime(startT)
+		if err != nil {
+			return nil, err
 		}
+		mint = ts.FromTime(start)
+	}
+
+	if endT != "" {
+		end, err := ParseTime(endT)
+		if err != nil {
+			return nil, err
+		}
+		maxt = ts.FromTime(end)
 	}
 
 	ctx := context.WithValue(context.Background(), "span", span)

@@ -40,9 +40,11 @@ type SeriesLabelsResponse struct {
 }
 
 type LabelValuesRequest struct {
-	Name       string `msg:"name"`
-	Constraint string `msg:"constraint"`
-	Timeout    string `msg:"timeout"`
+	Name    string   `msg:"name"`
+	Matches []string `msg:"matches"`
+	Start   string   `msg:"start"`
+	End     string   `msg:"end"`
+	Timeout string   `msg:"timeout"`
 }
 
 //msgp:tuple AddRequest

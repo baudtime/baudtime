@@ -19,7 +19,7 @@ var helpCommands = [][]string{
 	{"SLAVEOF", "host port", "Replication"},
 	{"INSTANTQRY", "expression [timestamp]", "10bit unix timestamp is the number of seconds that have elapsed since 00:00:00 Coordinated Universal Time (UTC), Thursday, 1 January 1970"},
 	{"WRITEPOINT", "metric{l=v, l=v} value timestamp", ""},
-	{"LABELVALS", "name constraint", "Server"},
+	{"LABELVALS", "name start end", "Server"},
 	{"JOINCLUSTER", "-", "Server"},
 	{"INFO", "-", "Server"},
 	{"PING", "-", "Server"},

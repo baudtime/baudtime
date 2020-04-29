@@ -216,12 +216,15 @@ func (q *mergeQuerier) Select(params *SelectParams, matchers ...*labels.Matcher)
 	}
 	wg.Wait()
 
-	multiErr := multierr.Combine(errors...)
+	for i, sl := 0, len(seriesSets); i < sl; i++ {
+		j := i - (sl - len(seriesSets))
 
-	if multiErr != nil {
-		return nil, multiErr
+		if seriesSets[j] == nil {
+			seriesSets = append(seriesSets[:j], seriesSets[j+1:]...)
+		}
 	}
-	return NewMergeSeriesSet(seriesSets), nil
+
+	return NewMergeSeriesSet(seriesSets), multierr.Combine(errors...)
 }
 
 // LabelValues returns all potential values for a label name.

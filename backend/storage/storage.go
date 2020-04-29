@@ -17,6 +17,7 @@ package storage
 
 import (
 	"bytes"
+	"io"
 	"math"
 	"reflect"
 	"strings"
@@ -34,6 +35,7 @@ import (
 	"github.com/opentracing/opentracing-go"
 	"github.com/prometheus/prometheus/pkg/value"
 	"github.com/prometheus/tsdb"
+	"github.com/prometheus/tsdb/chunks"
 	"github.com/prometheus/tsdb/labels"
 	"github.com/shirou/gopsutil/disk"
 	"go.uber.org/multierr"
@@ -191,7 +193,23 @@ type Storage struct {
 	OpStat           *OPStat
 }
 
-func New(db *tsdb.DB) *Storage {
+func Open(cfg *vars.StorageConfig) (*Storage, error) {
+	walSegmentSize := 0
+	if !cfg.TSDB.EnableWal {
+		walSegmentSize = -1
+	}
+
+	db, err := tsdb.Open(cfg.TSDB.Path, vars.Logger, nil, &tsdb.Options{
+		WALSegmentSize:         walSegmentSize,
+		RetentionDuration:      uint64(cfg.TSDB.RetentionDuration) / 1e6,
+		BlockRanges:            cfg.TSDB.BlockRanges,
+		NoLockfile:             cfg.TSDB.NoLockfile,
+		AllowOverlappingBlocks: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	opStat := new(OPStat)
 
 	symbolsK, err := bigcache.NewBigCache(bigcache.Config{
@@ -203,7 +221,7 @@ func New(db *tsdb.DB) *Storage {
 		Hasher:             util.NewHasher(),
 	})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	symbolsV, err := bigcache.NewBigCache(bigcache.Config{
@@ -215,7 +233,7 @@ func New(db *tsdb.DB) *Storage {
 		Hasher:             util.NewHasher(),
 	})
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	return &Storage{
@@ -228,7 +246,7 @@ func New(db *tsdb.DB) *Storage {
 		},
 		ReplicateManager: replication.NewReplicateManager(db),
 		OpStat:           opStat,
-	}
+	}, nil
 }
 
 func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *backendmsg.SelectResponse {
@@ -333,8 +351,12 @@ func (storage *Storage) HandleLabelValuesReq(request *backendmsg.LabelValuesRequ
 	if len(request.Matchers) == 0 {
 		values, err = q.LabelValues(request.Name)
 	} else {
-		queryResponse.ErrorMsg = "not implemented"
-		return queryResponse
+		ms, err := ProtoToMatchers(request.Matchers)
+		if err != nil {
+			queryResponse.ErrorMsg = err.Error()
+			return queryResponse
+		}
+		values, err = storage.labelValues(request.Name, ms, request.Mint, request.Maxt)
 	}
 
 	if err != nil {
@@ -347,6 +369,82 @@ func (storage *Storage) HandleLabelValuesReq(request *backendmsg.LabelValuesRequ
 	return queryResponse
 }
 
+func (storage *Storage) labelValues(name string, ms []labels.Matcher, mint, maxt int64) ([]string, error) {
+	m, err := labels.NewRegexpMatcher(name, ".*")
+	if err != nil {
+		return nil, err
+	}
+	ms = append(ms, m)
+
+	var blocks []tsdb.BlockReader
+	blks := storage.DB.Blocks()
+
+	for _, b := range blks {
+		if b.OverlapsClosedInterval(mint, maxt) {
+			blocks = append(blocks, b)
+		}
+	}
+
+	head := storage.DB.Head()
+	if maxt >= head.MinTime() {
+		blocks = append(blocks, head)
+	}
+
+	var closers []io.Closer
+	defer func() {
+		for _, c := range closers {
+			c.Close()
+		}
+	}()
+
+	var values = make(map[string]struct{})
+	var lset labels.Labels
+	var chks []chunks.Meta
+
+	for _, block := range blocks {
+		index, err := block.Index()
+		if err != nil {
+			return nil, err
+		}
+		closers = append(closers, index)
+
+		p, err := tsdb.PostingsForMatchers(index, ms...)
+		if err != nil {
+			return nil, err
+		}
+
+		for p.Next() {
+			var minTime, maxTime int64 = math.MaxInt64, math.MinInt64
+
+			err := index.Series(p.At(), &lset, &chks)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, chk := range chks {
+				if chk.MaxTime > maxTime {
+					maxTime = chk.MaxTime
+				}
+				if chk.MinTime < minTime {
+					minTime = chk.MinTime
+				}
+			}
+
+			if mint <= maxTime && minTime <= maxt {
+				if v := lset.Get(name); v != "" {
+					values[v] = struct{}{}
+				}
+			}
+		}
+	}
+
+	res := make([]string, 0, len(values))
+	for v, _ := range values {
+		res = append(res, v)
+	}
+	return res, nil
+}
+
 func (storage *Storage) Close() error {
 	return multierr.Combine(storage.ReplicateManager.Close(), storage.DB.Close())
 }
@@ -354,7 +452,7 @@ func (storage *Storage) Close() error {
 func (storage *Storage) Info(detailed bool) (Stat, error) {
 	stat := Stat{}
 
-	diskUsage, err := disk.Usage(vars.Cfg.Storage.TSDB.Path)
+	diskUsage, err := disk.Usage(storage.Dir())
 	if err != nil {
 		return stat, err
 	}

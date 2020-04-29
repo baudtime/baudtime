@@ -143,7 +143,7 @@ func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendmsg.SyncHeartbeat
 
 	f.Seek(offset, 0)
 
-	bytes := make([]byte, PageSize)
+	bytes := make([]byte, 10*PageSize)
 
 	m, err := f.Read(bytes)
 	if err == nil {
@@ -254,7 +254,7 @@ func (mgr *ReplicateManager) HandleSyncHandshake(handshake *backendmsg.SyncHands
 		return &backendmsg.SyncHandshakeAck{Status: backendmsg.HandshakeStatus_NoLongerMySlave, RelationID: mgr.RelationID()}
 	}
 
-	if handshake.BlocksMinT != math.MinInt64 && handshake.BlocksMinT != blocksMinTime(mgr.db) {
+	if handshake.BlocksMinT != math.MinInt64 && handshake.BlocksMinT < blocksMinTime(mgr.db) {
 		return &backendmsg.SyncHandshakeAck{
 			Status:     backendmsg.HandshakeStatus_FailedToSync,
 			RelationID: mgr.RelationID(),
