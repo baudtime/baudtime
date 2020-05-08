@@ -291,9 +291,11 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfComm
 			if err != nil {
 				return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: err.Error()}
 			}
+
 			if ack.Status != backendmsg.HandshakeStatus_NoLongerMySlave {
 				return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: fmt.Sprintf("status:%s, message:%s", ack.Status, ack.Message)}
 			}
+			atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id)), nil)
 
 			return &msg.GeneralResponse{Status: msg.StatusCode_Succeed}
 		} else if mgr.heartbeat.masterAddr == slaveOfCmd.MasterAddr {
@@ -303,6 +305,7 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfComm
 		}
 	} else {
 		if slaveOfCmd.MasterAddr == "" { //slaveof no one
+			atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id)), nil)
 			return &msg.GeneralResponse{Status: msg.StatusCode_Succeed}
 		} else {
 			ack, err := mgr.syncHandshake(slaveOfCmd.MasterAddr, false)
