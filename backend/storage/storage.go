@@ -60,7 +60,7 @@ func selectLabelsOnly(q tsdb.Querier, matchers []labels.Matcher) ([]*msg.Series,
 	return series, nil
 }
 
-func selectVectors(q tsdb.Querier, matchers []labels.Matcher, tIt *tm.TimestampIter) ([]*msg.Series, error) {
+func selectEachStep(q tsdb.Querier, matchers []labels.Matcher, tIt *tm.TimestampIter) ([]*msg.Series, error) {
 	set, err := q.Select(matchers...)
 	if err != nil {
 		return nil, err
@@ -124,7 +124,7 @@ func selectVectors(q tsdb.Querier, matchers []labels.Matcher, tIt *tm.TimestampI
 	return series, nil
 }
 
-func selectNoInterval(q tsdb.Querier, matchers []labels.Matcher, mint, maxt int64) ([]*msg.Series, error) {
+func selectSeries(q tsdb.Querier, matchers []labels.Matcher, mint, maxt int64) ([]*msg.Series, error) {
 	set, err := q.Select(matchers...)
 	if err != nil {
 		return nil, err
@@ -281,7 +281,7 @@ func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *back
 		series []*msg.Series
 	)
 
-	if (request.Mint == request.Maxt && request.Interval == 0) || (request.Mint < request.Maxt && request.Interval > 0) {
+	if (request.Mint == request.Maxt && request.Step == 0) || (request.Mint < request.Maxt && request.Step > 0) {
 		q, err = storage.DB.Querier(request.Mint-tm.DurationMilliSec(vars.Cfg.LookbackDelta), request.Maxt)
 		if err != nil {
 			queryResponse.ErrorMsg = err.Error()
@@ -289,8 +289,8 @@ func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *back
 		}
 		defer q.Close()
 
-		series, err = selectVectors(q, matchers, tm.NewTimestampIter(request.Mint, request.Maxt, request.Interval))
-	} else if request.Mint < request.Maxt && request.Interval == 0 {
+		series, err = selectEachStep(q, matchers, tm.NewTimestampIter(request.Mint, request.Maxt, request.Step))
+	} else if request.Mint < request.Maxt && request.Step == 0 {
 		q, err = storage.DB.Querier(request.Mint, request.Maxt)
 		if err != nil {
 			queryResponse.ErrorMsg = err.Error()
@@ -301,7 +301,7 @@ func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *back
 		if request.OnlyLabels {
 			series, err = selectLabelsOnly(q, matchers)
 		} else {
-			series, err = selectNoInterval(q, matchers, request.Mint, request.Maxt)
+			series, err = selectSeries(q, matchers, request.Mint, request.Maxt)
 		}
 	} else {
 		queryResponse.ErrorMsg = "parameter error"

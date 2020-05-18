@@ -48,7 +48,6 @@ func (q *querier) Select(selectParams *backend.SelectParams, matchers ...*labels
 	queryRequest := &backendmsg.SelectRequest{
 		Mint:     q.mint,
 		Maxt:     q.maxt,
-		Interval: selectParams.Step,
 		Matchers: util.MatchersToProto(matchers),
 	}
 

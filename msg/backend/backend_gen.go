@@ -687,10 +687,10 @@ func (z *SelectRequest) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Maxt")
 				return
 			}
-		case "interval":
-			z.Interval, err = dc.ReadInt64()
+		case "step":
+			z.Step, err = dc.ReadInt64()
 			if err != nil {
-				err = msgp.WrapError(err, "Interval")
+				err = msgp.WrapError(err, "Step")
 				return
 			}
 		case "matchers":
@@ -770,14 +770,14 @@ func (z *SelectRequest) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Maxt")
 		return
 	}
-	// write "interval"
-	err = en.Append(0xa8, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x76, 0x61, 0x6c)
+	// write "step"
+	err = en.Append(0xa4, 0x73, 0x74, 0x65, 0x70)
 	if err != nil {
 		return
 	}
-	err = en.WriteInt64(z.Interval)
+	err = en.WriteInt64(z.Step)
 	if err != nil {
-		err = msgp.WrapError(err, "Interval")
+		err = msgp.WrapError(err, "Step")
 		return
 	}
 	// write "matchers"
@@ -837,9 +837,9 @@ func (z *SelectRequest) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "maxt"
 	o = append(o, 0xa4, 0x6d, 0x61, 0x78, 0x74)
 	o = msgp.AppendInt64(o, z.Maxt)
-	// string "interval"
-	o = append(o, 0xa8, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x76, 0x61, 0x6c)
-	o = msgp.AppendInt64(o, z.Interval)
+	// string "step"
+	o = append(o, 0xa4, 0x73, 0x74, 0x65, 0x70)
+	o = msgp.AppendInt64(o, z.Step)
 	// string "matchers"
 	o = append(o, 0xa8, 0x6d, 0x61, 0x74, 0x63, 0x68, 0x65, 0x72, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.Matchers)))
@@ -893,10 +893,10 @@ func (z *SelectRequest) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "Maxt")
 				return
 			}
-		case "interval":
-			z.Interval, bts, err = msgp.ReadInt64Bytes(bts)
+		case "step":
+			z.Step, bts, err = msgp.ReadInt64Bytes(bts)
 			if err != nil {
-				err = msgp.WrapError(err, "Interval")
+				err = msgp.WrapError(err, "Step")
 				return
 			}
 		case "matchers":
@@ -955,7 +955,7 @@ func (z *SelectRequest) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *SelectRequest) Msgsize() (s int) {
-	s = 1 + 5 + msgp.Int64Size + 5 + msgp.Int64Size + 9 + msgp.Int64Size + 9 + msgp.ArrayHeaderSize
+	s = 1 + 5 + msgp.Int64Size + 5 + msgp.Int64Size + 5 + msgp.Int64Size + 9 + msgp.ArrayHeaderSize
 	for za0001 := range z.Matchers {
 		if z.Matchers[za0001] == nil {
 			s += msgp.NilSize

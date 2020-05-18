@@ -38,7 +38,7 @@ type Matcher struct {
 type SelectRequest struct {
 	Mint       int64      `msg:"mint"`
 	Maxt       int64      `msg:"maxt"`
-	Interval   int64      `msg:"interval"`
+	Step       int64      `msg:"step"`
 	Matchers   []*Matcher `msg:"matchers"`
 	OnlyLabels bool       `msg:"onlyLB"`
 	SpanCtx    []byte     `msg:"spanCtx"`
