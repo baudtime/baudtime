@@ -16,12 +16,6 @@
 package main
 
 import (
-	"os"
-	"runtime"
-	"runtime/debug"
-	"runtime/pprof"
-	"syscall"
-
 	"github.com/baudtime/baudtime"
 	"github.com/baudtime/baudtime/util"
 	osutil "github.com/baudtime/baudtime/util/os"
@@ -29,12 +23,20 @@ import (
 	"github.com/go-kit/kit/log/level"
 	"github.com/opentracing/opentracing-go"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
+	"os"
+	"runtime"
+	"runtime/debug"
+	"runtime/pprof"
+	"syscall"
 )
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
-	osutil.SetRlimit(syscall.RLIMIT_NOFILE, &syscall.Rlimit{102400, 102400})
 	vars.Init()
+
+	if vars.Cfg.RLimit > 0 {
+		osutil.SetRlimit(syscall.RLIMIT_NOFILE, &syscall.Rlimit{vars.Cfg.RLimit, vars.Cfg.RLimit})
+	}
 
 	if vars.CpuProfile != "" {
 		f, err := os.Create(vars.CpuProfile)

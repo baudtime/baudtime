@@ -110,11 +110,7 @@ func (c *ShardClient) Select(ctx context.Context, req *backendmsg.SelectRequest)
 
 	resp, err := c.exeQuery(shard, func(node *meta.Node) (msg.Message, error) {
 		if c.localStorage != nil && node.IP == vars.LocalIP && node.Port == vars.Cfg.TcpPort {
-			if resp := c.localStorage.HandleSelectReq(req); resp.Status != msg.StatusCode_Succeed {
-				return nil, errors.Errorf("select error on %s, err:%s", node.Addr(), resp.ErrorMsg)
-			} else {
-				return resp, nil
-			}
+			return c.localStorage.HandleSelectReq(req), nil
 		} else {
 			cli, err := defaultFactory.getClient(node.Addr())
 			if err != nil {
@@ -131,6 +127,8 @@ func (c *ShardClient) Select(ctx context.Context, req *backendmsg.SelectRequest)
 
 	if selResp, ok := resp.(*backendmsg.SelectResponse); !ok {
 		return nil, errors.Wrapf(tcp.BadMsgFormat, "the type of response is '%v'", reflect.TypeOf(resp))
+	} else if selResp.Status != msg.StatusCode_Succeed {
+		return nil, errors.Errorf("select error:%s", selResp.ErrorMsg)
 	} else {
 		return selResp, nil
 	}
@@ -160,11 +158,7 @@ func (c *ShardClient) LabelValues(ctx context.Context, req *backendmsg.LabelValu
 
 	resp, err := c.exeQuery(shard, func(node *meta.Node) (msg.Message, error) {
 		if c.localStorage != nil && node.IP == vars.LocalIP && node.Port == vars.Cfg.TcpPort {
-			if resp := c.localStorage.HandleLabelValuesReq(req); resp.Status != msg.StatusCode_Succeed {
-				return nil, errors.Errorf("select error on %s, err:%s", node.Addr(), resp.ErrorMsg)
-			} else {
-				return resp, nil
-			}
+			return c.localStorage.HandleLabelValuesReq(req), nil
 		} else {
 			cli, err := defaultFactory.getClient(node.Addr())
 			if err != nil {
@@ -181,6 +175,8 @@ func (c *ShardClient) LabelValues(ctx context.Context, req *backendmsg.LabelValu
 
 	if lValsResp, ok := resp.(*msg.LabelValuesResponse); !ok {
 		return nil, errors.Wrapf(tcp.BadMsgFormat, "the type of response is '%v'", reflect.TypeOf(resp))
+	} else if lValsResp.Status != msg.StatusCode_Succeed {
+		return nil, errors.Errorf("label values error:%s", lValsResp.ErrorMsg)
 	} else {
 		return lValsResp, nil
 	}

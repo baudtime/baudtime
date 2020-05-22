@@ -64,9 +64,10 @@ type ReplicationConfig struct {
 }
 
 type StorageConfig struct {
-	TSDB        TSDBConfig         `toml:"tsdb"`
-	StatReport  StatReportConfig   `toml:"stat_report"`
-	Replication *ReplicationConfig `toml:"replication"`
+	MaxPointsSel int                `toml:"max_points_sel,omitempty"`
+	TSDB         TSDBConfig         `toml:"tsdb"`
+	StatReport   StatReportConfig   `toml:"stat_report"`
+	Replication  *ReplicationConfig `toml:"replication"`
 }
 
 type JaegerConfig struct {
@@ -83,6 +84,7 @@ type Config struct {
 	NameSpace     string         `toml:"namespace,omitempty"`
 	LookbackDelta toml.Duration  `toml:"lookback_delta"`
 	InboundKBS    toml.Size      `toml:"inbound_kilo_bytes_per_sec"`
+	RLimit        uint64         `toml:"rlimit"`
 	Etcd          EtcdConfig     `toml:"etcd"`
 	Gateway       *GatewayConfig `toml:"gateway,omitempty"`
 	Storage       *StorageConfig `toml:"storage,omitempty"`
@@ -95,6 +97,7 @@ var Cfg = Config{
 	MaxConn:       10000,
 	NameSpace:     "baudtime",
 	LookbackDelta: toml.Duration(5 * time.Second),
+	RLimit:        102400,
 
 	Etcd: EtcdConfig{
 		Endpoints:     []string{"localhost:2379"},

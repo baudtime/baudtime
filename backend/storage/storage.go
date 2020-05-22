@@ -33,6 +33,7 @@ import (
 	tm "github.com/baudtime/baudtime/util/time"
 	"github.com/baudtime/baudtime/vars"
 	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 	"github.com/prometheus/prometheus/pkg/value"
 	"github.com/prometheus/tsdb"
 	"github.com/prometheus/tsdb/chunks"
@@ -181,6 +182,10 @@ func selectSeries(q tsdb.Querier, matchers []labels.Matcher, mint, maxt int64) (
 				Points: points[start:],
 			})
 		}
+	}
+
+	if vars.Cfg.Storage.MaxPointsSel > 0 && len(points) > vars.Cfg.Storage.MaxPointsSel {
+		return nil, errors.Errorf("too large select response, points size: %d", len(points))
 	}
 
 	return series, nil
