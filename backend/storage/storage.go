@@ -20,6 +20,7 @@ import (
 	"io"
 	"math"
 	"reflect"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -447,6 +448,8 @@ func (storage *Storage) labelValues(name string, ms []labels.Matcher, mint, maxt
 	for v, _ := range values {
 		res = append(res, v)
 	}
+	sort.Strings(res)
+
 	return res, nil
 }
 
