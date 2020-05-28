@@ -64,10 +64,9 @@ type ReplicationConfig struct {
 }
 
 type StorageConfig struct {
-	MaxPointsSel int                `toml:"max_points_sel,omitempty"`
-	TSDB         TSDBConfig         `toml:"tsdb"`
-	StatReport   StatReportConfig   `toml:"stat_report"`
-	Replication  *ReplicationConfig `toml:"replication"`
+	TSDB        TSDBConfig         `toml:"tsdb"`
+	StatReport  StatReportConfig   `toml:"stat_report"`
+	Replication *ReplicationConfig `toml:"replication"`
 }
 
 type JaegerConfig struct {
@@ -77,15 +76,21 @@ type JaegerConfig struct {
 	CollectorEndpoint string `toml:"collector_endpoint"`
 }
 
+type LimitConfig struct {
+	RLimit             uint64    `toml:"rlimit,omitempty"`
+	MaxPointsTotal     int       `toml:"max_points_total,omitempty"`
+	MaxPointsPerSeries int64     `toml:"max_points_per_series,omitempty"`
+	InboundKBS         toml.Size `toml:"inbound_kilo_bytes_per_sec,omitempty"`
+}
+
 type Config struct {
 	TcpPort       string         `toml:"tcp_port"`
 	HttpPort      string         `toml:"http_port"`
 	MaxConn       int            `toml:"max_conn"`
 	NameSpace     string         `toml:"namespace,omitempty"`
 	LookbackDelta toml.Duration  `toml:"lookback_delta"`
-	InboundKBS    toml.Size      `toml:"inbound_kilo_bytes_per_sec"`
-	RLimit        uint64         `toml:"rlimit"`
 	Etcd          EtcdConfig     `toml:"etcd"`
+	Limit         LimitConfig    `toml:"limit"`
 	Gateway       *GatewayConfig `toml:"gateway,omitempty"`
 	Storage       *StorageConfig `toml:"storage,omitempty"`
 	Jaeger        *JaegerConfig  `toml:"jaeger,omitempty"`
@@ -97,8 +102,11 @@ var Cfg = Config{
 	MaxConn:       10000,
 	NameSpace:     "baudtime",
 	LookbackDelta: toml.Duration(5 * time.Second),
-	RLimit:        102400,
-
+	Limit: LimitConfig{
+		RLimit:             102400,
+		MaxPointsTotal:     3600000,
+		MaxPointsPerSeries: 6000,
+	},
 	Etcd: EtcdConfig{
 		Endpoints:     []string{"localhost:2379"},
 		DialTimeout:   toml.Duration(5 * time.Second),

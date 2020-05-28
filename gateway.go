@@ -36,6 +36,7 @@ import (
 	"github.com/baudtime/baudtime/promql"
 	"github.com/baudtime/baudtime/util"
 	ts "github.com/baudtime/baudtime/util/time"
+	"github.com/baudtime/baudtime/vars"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
@@ -477,9 +478,9 @@ func (gateway *Gateway) rangeQuery(startT, endT, step, timeout, query string) (*
 	}
 
 	// For safety, limit the number of returned points per timeseries.
-	// This is sufficient for 60s resolution for a week or 1h resolution for a year.
-	if end.Sub(start)/interval > 11000 {
-		return nil, errors.New("exceeded maximum resolution of 11,000 points per timeseries. Try decreasing the query resolution (?step=XX)")
+	// 11000 is sufficient for 60s resolution for a week or 1h resolution for a year.
+	if int64(end.Sub(start)/interval) > vars.Cfg.Limit.MaxPointsPerSeries {
+		return nil, errors.Errorf("exceeded maximum resolution of %d points per timeseries. Try decreasing the query resolution (?step=XX)", vars.Cfg.Limit.MaxPointsPerSeries)
 	}
 
 	ctx := context.WithValue(context.Background(), "span", span)

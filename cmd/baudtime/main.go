@@ -34,8 +34,8 @@ func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 	vars.Init()
 
-	if vars.Cfg.RLimit > 0 {
-		osutil.SetRlimit(syscall.RLIMIT_NOFILE, &syscall.Rlimit{vars.Cfg.RLimit, vars.Cfg.RLimit})
+	if vars.Cfg.Limit.RLimit > 0 {
+		osutil.SetRlimit(syscall.RLIMIT_NOFILE, &syscall.Rlimit{vars.Cfg.Limit.RLimit, vars.Cfg.Limit.RLimit})
 	}
 
 	if vars.CpuProfile != "" {

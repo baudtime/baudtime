@@ -177,16 +177,16 @@ func selectSeries(q tsdb.Querier, matchers []labels.Matcher, mint, maxt int64) (
 			}
 		}
 
+		if vars.Cfg.Limit.MaxPointsTotal > 0 && len(points) > vars.Cfg.Limit.MaxPointsTotal {
+			return nil, errors.Errorf("too large select response, points size: %d", len(points))
+		}
+
 		if len(points[start:]) > 0 {
 			series = append(series, &msg.Series{
 				Labels: LabelsToProto(curSeries.Labels()),
 				Points: points[start:],
 			})
 		}
-	}
-
-	if vars.Cfg.Storage.MaxPointsSel > 0 && len(points) > vars.Cfg.Storage.MaxPointsSel {
-		return nil, errors.Errorf("too large select response, points size: %d", len(points))
 	}
 
 	return series, nil

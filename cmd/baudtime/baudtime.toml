@@ -5,6 +5,12 @@ max_conn = 10000
 namespace = "n1"
 lookback_delta = "5s"
 
+[limit]
+  rlimit = 102400
+  max_points_total = 3600000
+  max_points_per_series = 6000
+  inbound_kilo_bytes_per_sec = 0
+
 [etcd]
   endpoints = ["localhost:2379"]
   dial_timeout = "5s"

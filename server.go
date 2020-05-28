@@ -245,8 +245,8 @@ func Run() {
 		}
 	}()
 
-	if Cfg.InboundKBS > 0 {
-		rateLimiter = rate.NewLimiter(rate.Limit(Cfg.InboundKBS), int(Cfg.InboundKBS)/6+int(Cfg.InboundKBS))
+	if Cfg.Limit.InboundKBS > 0 {
+		rateLimiter = rate.NewLimiter(rate.Limit(Cfg.Limit.InboundKBS), int(Cfg.Limit.InboundKBS)/6+int(Cfg.Limit.InboundKBS))
 	}
 
 	tcpServer := tcp.NewTcpServer(Cfg.TcpPort, Cfg.MaxConn, &tcpServerObserver{
