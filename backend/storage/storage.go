@@ -19,6 +19,7 @@ import (
 	"bytes"
 	"io"
 	"math"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -200,12 +201,17 @@ type Storage struct {
 }
 
 func Open(cfg *vars.StorageConfig) (*Storage, error) {
+	dbDir, err := filepath.EvalSymlinks(cfg.TSDB.Path)
+	if err != nil {
+		return nil, err
+	}
+
 	walSegmentSize := 0
 	if !cfg.TSDB.EnableWal {
 		walSegmentSize = -1
 	}
 
-	db, err := tsdb.Open(cfg.TSDB.Path, vars.Logger, nil, &tsdb.Options{
+	db, err := tsdb.Open(dbDir, vars.Logger, nil, &tsdb.Options{
 		WALSegmentSize:         walSegmentSize,
 		RetentionDuration:      uint64(cfg.TSDB.RetentionDuration) / 1e6,
 		BlockRanges:            cfg.TSDB.BlockRanges,
