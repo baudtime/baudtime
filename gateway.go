@@ -286,21 +286,8 @@ func (gateway *Gateway) HttpLabelValues(c *fasthttp.RequestCtx) {
 	})
 }
 
-func (gateway *Gateway) HttpIngest(jobBase64Encoded bool) func(c *fasthttp.RequestCtx) {
+func (gateway *Gateway) HttpIngest(jobBase64Encoded bool, asPromPushGateway bool) func(c *fasthttp.RequestCtx) {
 	return func(c *fasthttp.RequestCtx) {
-		job, ok := c.UserValue("job").(string)
-		if ok && jobBase64Encoded {
-			var err error
-			if job, err = decodeBase64(job); err != nil {
-				c.Error(fmt.Sprintf("invalid base64 encoding in job name %q: %v", c.UserValue("job"), err), fasthttp.StatusBadRequest)
-				return
-			}
-		}
-		if !ok || job == "" {
-			c.Error("job name is required", http.StatusBadRequest)
-			return
-		}
-
 		var lbsURL map[string]string
 		if labelsString, ok := c.UserValue("labels").(string); ok {
 			var err error
@@ -312,7 +299,22 @@ func (gateway *Gateway) HttpIngest(jobBase64Encoded bool) func(c *fasthttp.Reque
 		} else {
 			lbsURL = make(map[string]string)
 		}
-		lbsURL["job"] = job
+
+		if asPromPushGateway {
+			job, ok := c.UserValue("job").(string)
+			if ok && jobBase64Encoded {
+				var err error
+				if job, err = decodeBase64(job); err != nil {
+					c.Error(fmt.Sprintf("invalid base64 encoding in job name %q: %v", c.UserValue("job"), err), fasthttp.StatusBadRequest)
+					return
+				}
+			}
+			if !ok || job == "" {
+				c.Error("job name is required", http.StatusBadRequest)
+				return
+			}
+			lbsURL["job"] = job
+		}
 
 		mediaType, _, err := mime.ParseMediaType(util.YoloString(c.Request.Header.ContentType()))
 		if mediaType == "application/vnd.google.protobuf" || err != nil {
@@ -367,7 +369,7 @@ func (gateway *Gateway) HttpIngest(jobBase64Encoded bool) func(c *fasthttp.Reque
 			for name, value := range lbsURL {
 				lbs = append(lbs, msg.Label{name, value})
 			}
-			if !hasInstance {
+			if asPromPushGateway && !hasInstance {
 				lbs = append(lbs, msg.Label{model.InstanceLabel, ""})
 			}
 
