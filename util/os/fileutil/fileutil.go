@@ -50,6 +50,9 @@ func ClearPath(path string) (err error) {
 }
 
 func RenameFile(from, to string) error {
+	if !Exist(from) {
+		return nil
+	}
 	if err := os.RemoveAll(to); err != nil {
 		return err
 	}
@@ -68,4 +71,9 @@ func RenameFile(from, to string) error {
 		return err
 	}
 	return pdir.Close()
+}
+
+func Exist(name string) bool {
+	_, err := os.Stat(name)
+	return err == nil
 }

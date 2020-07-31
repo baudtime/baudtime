@@ -17,16 +17,14 @@ package replication
 
 import (
 	"encoding/json"
-	"io/ioutil"
-	"math"
-	"os"
-	"path/filepath"
-	"sync"
-
 	"github.com/baudtime/baudtime/util/os/fileutil"
 	. "github.com/baudtime/baudtime/vars"
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/tsdb"
+	"io/ioutil"
+	"math"
+	"os"
+	"path/filepath"
 )
 
 const replicationMeta = "replication.json"
@@ -96,22 +94,4 @@ func blocksMinTime(db *tsdb.DB) int64 {
 	}
 
 	return math.MinInt64
-}
-
-var (
-	strSlicePool = &sync.Pool{}
-)
-
-func getStrSlice() []string {
-	v := strSlicePool.Get()
-	if v != nil {
-		return v.([]string)
-	}
-
-	return make([]string, 0, 3)
-}
-
-func putStrSlice(slice []string) {
-	slice = slice[:0]
-	strSlicePool.Put(slice)
 }

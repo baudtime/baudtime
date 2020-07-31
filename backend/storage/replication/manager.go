@@ -63,7 +63,7 @@ func NewReplicateManager(db *tsdb.DB) *ReplicateManager {
 }
 
 func (mgr *ReplicateManager) HandleWriteReq(request []byte) {
-	toDelete := getStrSlice()
+	var toDelete []string
 
 	mgr.sampleFeeds.Range(func(name, feed interface{}) bool {
 		err := feed.(*sampleFeed).Write(request)
@@ -77,16 +77,16 @@ func (mgr *ReplicateManager) HandleWriteReq(request []byte) {
 		return true
 	})
 
-	for _, name := range toDelete {
-		feed, found := mgr.sampleFeeds.Load(name)
-		if found {
-			feed.(*sampleFeed).Close()
-			mgr.sampleFeeds.Delete(name)
+	if len(toDelete) > 0 {
+		for _, name := range toDelete {
+			feed, found := mgr.sampleFeeds.Load(name)
+			if found {
+				feed.(*sampleFeed).Close()
+				mgr.sampleFeeds.Delete(name)
+			}
+			level.Warn(Logger).Log("msg", "slave was removed", "slaveAddr", name)
 		}
-		level.Warn(Logger).Log("msg", "slave was removed", "slaveAddr", name)
 	}
-
-	putStrSlice(toDelete)
 }
 
 func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendmsg.SyncHeartbeat) *backendmsg.SyncHeartbeatAck {

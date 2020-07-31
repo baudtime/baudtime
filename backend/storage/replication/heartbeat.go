@@ -98,7 +98,7 @@ func (h *Heartbeat) start() {
 					h.db.CleanTombstones() //h.db.Reload()
 				}
 
-				if fileSyncing == nil {
+				if fileSyncing != nil {
 					fileSyncing.Close()
 					fileSyncing = nil
 				}
