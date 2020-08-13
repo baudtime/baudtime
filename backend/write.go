@@ -119,15 +119,26 @@ func (app *appender) Add(l []msg.Label, t int64, v float64, hash uint64) error {
 }
 
 func (app *appender) Flush() error {
+	var (
+		differentHash int
+		lastHash      uint64
+	)
+
 	for i := 0; i < stripeSize; i++ {
-		for k, ss := range app.series[i] {
+		for hash, ss := range app.series[i] {
 			app.toFlush.Series = append(app.toFlush.Series, ss...)
-			app.series[i].del(k)
+			app.series[i].del(hash)
+			differentHash++
+			lastHash = hash
 		}
 	}
 	if len(app.toFlush.Series) == 0 {
 		return nil
 	}
+
+	app.toFlush.Hashed = (differentHash == 1)
+	app.toFlush.HashCode = lastHash
+
 	err := app.client.Add(context.TODO(), &app.toFlush)
 
 	for _, s := range app.toFlush.Series {
@@ -135,6 +146,7 @@ func (app *appender) Flush() error {
 		s.Points = s.Points[:0]
 		seriesPool.Put(s)
 	}
+
 	app.toFlush.Series = app.toFlush.Series[:0]
 
 	if err != nil {

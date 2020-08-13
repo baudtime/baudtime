@@ -28,6 +28,7 @@ import (
 
 type ServiceAddrProvider interface {
 	GetServiceAddr() (string, error)
+	GetServiceAddrByHash(hash uint64) (string, error)
 	ServiceDown(addr string)
 	ServiceRecover(addr string)
 	Watch()
@@ -64,6 +65,19 @@ func (provider *StaticServiceAddrProvider) GetServiceAddr() (string, error) {
 	atomic.StoreUint32(&provider.iter, iter)
 
 	addr := provider.healthyAddrs[iter]
+	return addr, nil
+}
+
+func (provider *StaticServiceAddrProvider) GetServiceAddrByHash(hash uint64) (string, error) {
+	provider.mtx.RLock()
+	defer provider.mtx.RUnlock()
+
+	addrNum := len(provider.healthyAddrs)
+	if addrNum <= 0 {
+		return "", nil
+	}
+
+	addr := provider.healthyAddrs[hash%uint64(addrNum)]
 	return addr, nil
 }
 

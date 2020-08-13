@@ -80,7 +80,7 @@ func (feed *sampleFeed) writeToHandOff(msg []byte) (err error) {
 }
 
 func (feed *sampleFeed) writeToConn(msg []byte) (err error) {
-	c, err := feed.conns.GetConn()
+	c, err := feed.conns.GetConn(nil)
 	if err != nil {
 		if connRefused(err) {
 			atomic.StoreUint32(&feed.connRefused, 1)

@@ -143,7 +143,7 @@ func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendmsg.SyncHeartbeat
 
 	f.Seek(offset, 0)
 
-	bytes := make([]byte, 10*PageSize)
+	bytes := make([]byte, 256*PageSize)
 
 	m, err := f.Read(bytes)
 	if err == nil {

@@ -16,6 +16,7 @@
 package client
 
 import (
+	"github.com/baudtime/baudtime/msg"
 	"github.com/pkg/errors"
 	"go.uber.org/multierr"
 	"sync"
@@ -25,7 +26,7 @@ import (
 )
 
 type ConnPool interface {
-	GetConn() (*Conn, error)
+	GetConn(msg.Message) (*Conn, error)
 	Destroy(c *Conn) error
 	Close() error
 }
@@ -56,8 +57,18 @@ func NewServiceConnPool(addrProvider ServiceAddrProvider, writeOnly bool) ConnPo
 	return pool
 }
 
-func (pool *ServiceConnPool) GetConn() (*Conn, error) {
-	address, err := pool.addrProv.GetServiceAddr()
+func (pool *ServiceConnPool) GetConn(message msg.Message) (*Conn, error) {
+	var (
+		address string
+		err     error
+	)
+
+	if hashable, hashcode := msg.Hashable(message); hashable {
+		address, err = pool.addrProv.GetServiceAddrByHash(hashcode)
+	} else {
+		address, err = pool.addrProv.GetServiceAddr()
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -157,9 +168,16 @@ func NewHostConnPool(connNum int, address string, writeOnly bool) ConnPool {
 	}
 }
 
-func (pool *HostConnPool) GetConn() (*Conn, error) {
-	iter := atomic.AddUint64(&pool.iter, 1) % uint64(pool.size)
-	c := (*Conn)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&pool.conns[iter]))))
+func (pool *HostConnPool) GetConn(message msg.Message) (*Conn, error) {
+	var idx uint64
+
+	if hashable, hashcode := msg.Hashable(message); hashable {
+		idx = hashcode % uint64(pool.size)
+	} else {
+		idx = atomic.AddUint64(&pool.iter, 1) % uint64(pool.size)
+	}
+
+	c := (*Conn)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&pool.conns[idx]))))
 
 	if c != nil && !c.Closed() {
 		return c, nil
@@ -173,11 +191,11 @@ func (pool *HostConnPool) GetConn() (*Conn, error) {
 		pool.onConnect(newc)
 	}
 
-	if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&pool.conns[iter])), unsafe.Pointer(c), unsafe.Pointer(newc)) {
+	if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&pool.conns[idx])), unsafe.Pointer(c), unsafe.Pointer(newc)) {
 		c = newc
 	} else {
 		newc.Close()
-		c = (*Conn)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&pool.conns[iter]))))
+		c = (*Conn)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&pool.conns[idx]))))
 	}
 
 	return c, nil
@@ -206,7 +224,7 @@ var dummyErr error = errors.New("dummy conn, not real")
 
 type dummyPool struct{}
 
-func (pool dummyPool) GetConn() (*Conn, error) {
+func (pool dummyPool) GetConn(msg.Message) (*Conn, error) {
 	return nil, dummyErr
 }
 

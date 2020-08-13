@@ -209,7 +209,7 @@ func (cli *Client) SyncRequest(ctx context.Context, request msg.Message) (msg.Me
 		Message: request,
 	}
 
-	c, err := cli.syncConns.GetConn()
+	c, err := cli.syncConns.GetConn(request)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +244,7 @@ func (cli *Client) AsyncRequest(request msg.Message, callback Callback) error {
 		Message: request,
 	}
 
-	c, err := cli.asyncConns.GetConn()
+	c, err := cli.asyncConns.GetConn(request)
 	if err != nil {
 		return err
 	}

@@ -49,5 +49,11 @@ type LabelValuesRequest struct {
 
 //msgp:tuple AddRequest
 type AddRequest struct {
-	Series []*msg.Series `msg:"series"`
+	Series   []*msg.Series `msg:"series"`
+	Hashed   bool          `msg:"-"`
+	HashCode uint64        `msg:"-"`
+}
+
+func (r AddRequest) Hashable() (bool, uint64) {
+	return r.Hashed, r.HashCode
 }
