@@ -353,15 +353,19 @@ func (h *Heartbeat) cronReportInfo() {
 		select {
 		case <-ticker.C:
 			if node, err = h.f(); err == nil && node != h.lastNodeInfo {
-				h.reportInfo(node)
+				err = h.reportInfo(node)
 			}
 		case <-h.registerC:
 			if node, err = h.f(); err == nil {
-				h.reportInfo(node)
+				err = h.reportInfo(node)
 			}
 		case <-h.exitCh:
 			level.Warn(vars.Logger).Log("msg", "report host info for heartbeat exit!!!")
 			return
+		}
+
+		if err != nil {
+			level.Error(vars.Logger).Log("msg", "error occurred while reporting", "err", err)
 		}
 	}
 }
