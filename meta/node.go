@@ -18,6 +18,7 @@ package meta
 import (
 	"context"
 	"encoding/json"
+	"google.golang.org/grpc"
 	"io"
 	"net"
 	"sort"
@@ -165,6 +166,7 @@ func (h *Heartbeat) Start() error {
 	cli, err := clientv3.New(clientv3.Config{
 		Endpoints:   vars.Cfg.Etcd.Endpoints,
 		DialTimeout: time.Duration(vars.Cfg.Etcd.DialTimeout),
+		DialOptions: []grpc.DialOption{grpc.WithBlock()},
 	})
 	if err != nil {
 		return errors.Wrap(err, "can't init heartbeat etcd client")
@@ -231,6 +233,7 @@ func (h *Heartbeat) keepLease() {
 	clientCfg := clientv3.Config{
 		Endpoints:   vars.Cfg.Etcd.Endpoints,
 		DialTimeout: time.Duration(vars.Cfg.Etcd.DialTimeout),
+		DialOptions: []grpc.DialOption{grpc.WithBlock()},
 	}
 
 	for {

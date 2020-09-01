@@ -19,6 +19,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"google.golang.org/grpc"
 	"os"
 	"sort"
 	"strconv"
@@ -218,6 +219,7 @@ func (m *meta) watch() {
 		cli, err := clientv3.New(clientv3.Config{
 			Endpoints:   vars.Cfg.Etcd.Endpoints,
 			DialTimeout: time.Duration(vars.Cfg.Etcd.DialTimeout),
+			DialOptions: []grpc.DialOption{grpc.WithBlock()},
 		})
 		if err != nil {
 			level.Error(vars.Logger).Log("msg", "failed to connect to etcd", "err", err)

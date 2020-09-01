@@ -25,10 +25,10 @@ require (
 	github.com/uber/jaeger-client-go v2.19.0+incompatible
 	github.com/uber/jaeger-lib v2.2.0+incompatible // indirect
 	github.com/valyala/fasthttp v1.10.0
-	go.etcd.io/etcd v0.0.0-20190917205325-a14579fbfb1a
-	go.uber.org/multierr v1.1.0
-	golang.org/x/text v0.3.2
+	go.etcd.io/etcd v0.5.0-alpha.5.0.20200824191128-ae9734ed278b
+	go.uber.org/multierr v1.5.0
+	golang.org/x/text v0.3.3
 	golang.org/x/time v0.0.0-20180412165947-fbb02b2291d2
-	google.golang.org/grpc v1.23.1
+	google.golang.org/grpc v1.26.0
 	gopkg.in/natefinch/lumberjack.v2 v2.0.0
 )
