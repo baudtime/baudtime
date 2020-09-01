@@ -232,15 +232,13 @@ func mutexRun(lock string, f func(session *concurrency.Session) error) error {
 	}
 	defer session.Close()
 
-	l := concurrency.NewMutex(session, "/l/"+lock)
+	l := NewMutex(session, "/l/"+lock)
 
-	ctx, cancel := context.WithTimeout(cli.Ctx(), 10*time.Second)
-	err = l.Lock(ctx)
-	cancel()
+	err = l.TryLock(cli.Ctx())
 	if err != nil {
-		return err
+		return errors.Wrap(err, "can't acquire lock")
 	}
-	defer l.Unlock(context.Background())
+	defer l.Unlock(cli.Ctx())
 
 	return f(session)
 }
