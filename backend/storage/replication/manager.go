@@ -295,7 +295,7 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfComm
 			if ack.Status != backendmsg.HandshakeStatus_NoLongerMySlave {
 				return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: fmt.Sprintf("status:%s, message:%s", ack.Status, ack.Message)}
 			}
-			atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id)), nil)
+			//atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id)), nil)
 
 			return &msg.GeneralResponse{Status: msg.StatusCode_Succeed}
 		} else if mgr.heartbeat.masterAddr == slaveOfCmd.MasterAddr {
@@ -305,7 +305,7 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfComm
 		}
 	} else {
 		if slaveOfCmd.MasterAddr == "" { //slaveof no one
-			atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id)), nil)
+			//atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id)), nil)
 			return &msg.GeneralResponse{Status: msg.StatusCode_Succeed}
 		} else {
 			ack, err := mgr.syncHandshake(slaveOfCmd.MasterAddr, false)
@@ -358,7 +358,7 @@ func (mgr *ReplicateManager) syncHandshake(masterAddr string, slaveOfNoOne bool)
 
 	relationID := mgr.RelationID()
 	if relationID == "" {
-		if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id)), nil, unsafe.Pointer(&ack.RelationID)) {
+		if mgr.joinCluster(ack.RelationID) {
 			return ack, nil
 		}
 	} else if relationID == ack.RelationID {
@@ -384,11 +384,17 @@ func (mgr *ReplicateManager) Slaves() (slaveAddrs []string) {
 	return
 }
 
-func (mgr *ReplicateManager) JoinCluster() {
+func (mgr *ReplicateManager) JoinCluster() bool {
 	rid := strings.Replace(uuid.NewV1().String(), "-", "", -1)
+	return mgr.joinCluster(rid)
+}
+
+func (mgr *ReplicateManager) joinCluster(rid string) bool {
 	if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id)), nil, unsafe.Pointer(&rid)) {
 		storeRelationID(mgr.db.Dir(), rid)
+		return true
 	}
+	return false
 }
 
 func (mgr *ReplicateManager) RelationID() (rid string) {
