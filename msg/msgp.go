@@ -2,6 +2,8 @@
 
 package msg
 
+import "encoding/json"
+
 type StatusCode byte
 
 const (
@@ -19,6 +21,20 @@ type Label struct {
 type Point struct {
 	T int64   `msg:"T"`
 	V float64 `msg:"V"`
+}
+
+type Labels []Label
+
+func (ls Labels) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ls.Map())
+}
+
+func (ls Labels) Map() map[string]string {
+	m := make(map[string]string, len(ls))
+	for _, l := range ls {
+		m[l.Name] = l.Value
+	}
+	return m
 }
 
 //msgp:tuple Series

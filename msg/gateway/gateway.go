@@ -34,7 +34,7 @@ type SeriesLabelsRequest struct {
 }
 
 type SeriesLabelsResponse struct {
-	Labels   [][]msg.Label  `msg:"labels"`
+	Labels   []msg.Labels  `msg:"labels"`
 	Status   msg.StatusCode `msg:"status"`
 	ErrorMsg string         `msg:"errorMsg"`
 }

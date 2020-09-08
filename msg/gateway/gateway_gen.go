@@ -1161,26 +1161,13 @@ func (z *SeriesLabelsResponse) DecodeMsg(dc *msgp.Reader) (err error) {
 			if cap(z.Labels) >= int(zb0002) {
 				z.Labels = (z.Labels)[:zb0002]
 			} else {
-				z.Labels = make([][]msg.Label, zb0002)
+				z.Labels = make([]msg.Labels, zb0002)
 			}
 			for za0001 := range z.Labels {
-				var zb0003 uint32
-				zb0003, err = dc.ReadArrayHeader()
+				err = z.Labels[za0001].DecodeMsg(dc)
 				if err != nil {
 					err = msgp.WrapError(err, "Labels", za0001)
 					return
-				}
-				if cap(z.Labels[za0001]) >= int(zb0003) {
-					z.Labels[za0001] = (z.Labels[za0001])[:zb0003]
-				} else {
-					z.Labels[za0001] = make([]msg.Label, zb0003)
-				}
-				for za0002 := range z.Labels[za0001] {
-					err = z.Labels[za0001][za0002].DecodeMsg(dc)
-					if err != nil {
-						err = msgp.WrapError(err, "Labels", za0001, za0002)
-						return
-					}
 				}
 			}
 		case "status":
@@ -1220,17 +1207,10 @@ func (z *SeriesLabelsResponse) EncodeMsg(en *msgp.Writer) (err error) {
 		return
 	}
 	for za0001 := range z.Labels {
-		err = en.WriteArrayHeader(uint32(len(z.Labels[za0001])))
+		err = z.Labels[za0001].EncodeMsg(en)
 		if err != nil {
 			err = msgp.WrapError(err, "Labels", za0001)
 			return
-		}
-		for za0002 := range z.Labels[za0001] {
-			err = z.Labels[za0001][za0002].EncodeMsg(en)
-			if err != nil {
-				err = msgp.WrapError(err, "Labels", za0001, za0002)
-				return
-			}
 		}
 	}
 	// write "status"
@@ -1264,13 +1244,10 @@ func (z *SeriesLabelsResponse) MarshalMsg(b []byte) (o []byte, err error) {
 	o = append(o, 0x83, 0xa6, 0x6c, 0x61, 0x62, 0x65, 0x6c, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.Labels)))
 	for za0001 := range z.Labels {
-		o = msgp.AppendArrayHeader(o, uint32(len(z.Labels[za0001])))
-		for za0002 := range z.Labels[za0001] {
-			o, err = z.Labels[za0001][za0002].MarshalMsg(o)
-			if err != nil {
-				err = msgp.WrapError(err, "Labels", za0001, za0002)
-				return
-			}
+		o, err = z.Labels[za0001].MarshalMsg(o)
+		if err != nil {
+			err = msgp.WrapError(err, "Labels", za0001)
+			return
 		}
 	}
 	// string "status"
@@ -1314,26 +1291,13 @@ func (z *SeriesLabelsResponse) UnmarshalMsg(bts []byte) (o []byte, err error) {
 			if cap(z.Labels) >= int(zb0002) {
 				z.Labels = (z.Labels)[:zb0002]
 			} else {
-				z.Labels = make([][]msg.Label, zb0002)
+				z.Labels = make([]msg.Labels, zb0002)
 			}
 			for za0001 := range z.Labels {
-				var zb0003 uint32
-				zb0003, bts, err = msgp.ReadArrayHeaderBytes(bts)
+				bts, err = z.Labels[za0001].UnmarshalMsg(bts)
 				if err != nil {
 					err = msgp.WrapError(err, "Labels", za0001)
 					return
-				}
-				if cap(z.Labels[za0001]) >= int(zb0003) {
-					z.Labels[za0001] = (z.Labels[za0001])[:zb0003]
-				} else {
-					z.Labels[za0001] = make([]msg.Label, zb0003)
-				}
-				for za0002 := range z.Labels[za0001] {
-					bts, err = z.Labels[za0001][za0002].UnmarshalMsg(bts)
-					if err != nil {
-						err = msgp.WrapError(err, "Labels", za0001, za0002)
-						return
-					}
 				}
 			}
 		case "status":
@@ -1364,10 +1328,7 @@ func (z *SeriesLabelsResponse) UnmarshalMsg(bts []byte) (o []byte, err error) {
 func (z *SeriesLabelsResponse) Msgsize() (s int) {
 	s = 1 + 7 + msgp.ArrayHeaderSize
 	for za0001 := range z.Labels {
-		s += msgp.ArrayHeaderSize
-		for za0002 := range z.Labels[za0001] {
-			s += z.Labels[za0001][za0002].Msgsize()
-		}
+		s += z.Labels[za0001].Msgsize()
 	}
 	s += 7 + z.Status.Msgsize() + 9 + msgp.StringPrefixSize + len(z.ErrorMsg)
 	return

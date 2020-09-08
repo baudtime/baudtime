@@ -517,7 +517,7 @@ func (gateway *Gateway) rangeQuery(startT, endT, step, timeout, query string) (*
 	}, nil
 }
 
-func (gateway *Gateway) seriesLabels(matches []string, startT, endT, timeout string) ([][]msg.Label, error) {
+func (gateway *Gateway) seriesLabels(matches []string, startT, endT, timeout string) ([]msg.Labels, error) {
 	span := opentracing.StartSpan("seriesLabels")
 	defer span.Finish()
 
@@ -583,7 +583,7 @@ func (gateway *Gateway) seriesLabels(matches []string, startT, endT, timeout str
 	}
 
 	set := backend.NewMergeSeriesSet(sets)
-	metrics := [][]msg.Label{}
+	var metrics []msg.Labels
 
 	for set.Next() {
 		metrics = append(metrics, util.LabelsToProto(set.At().Labels()))

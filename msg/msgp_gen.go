@@ -431,6 +431,132 @@ func (z *LabelValuesResponse) Msgsize() (s int) {
 }
 
 // DecodeMsg implements msgp.Decodable
+func (z *Labels) DecodeMsg(dc *msgp.Reader) (err error) {
+	var zb0002 uint32
+	zb0002, err = dc.ReadArrayHeader()
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if cap((*z)) >= int(zb0002) {
+		(*z) = (*z)[:zb0002]
+	} else {
+		(*z) = make(Labels, zb0002)
+	}
+	for zb0001 := range *z {
+		var zb0003 uint32
+		zb0003, err = dc.ReadArrayHeader()
+		if err != nil {
+			err = msgp.WrapError(err, zb0001)
+			return
+		}
+		if zb0003 != 2 {
+			err = msgp.ArrayError{Wanted: 2, Got: zb0003}
+			return
+		}
+		(*z)[zb0001].Name, err = dc.ReadString()
+		if err != nil {
+			err = msgp.WrapError(err, zb0001, "Name")
+			return
+		}
+		(*z)[zb0001].Value, err = dc.ReadString()
+		if err != nil {
+			err = msgp.WrapError(err, zb0001, "Value")
+			return
+		}
+	}
+	return
+}
+
+// EncodeMsg implements msgp.Encodable
+func (z Labels) EncodeMsg(en *msgp.Writer) (err error) {
+	err = en.WriteArrayHeader(uint32(len(z)))
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	for zb0004 := range z {
+		// array header, size 2
+		err = en.Append(0x92)
+		if err != nil {
+			return
+		}
+		err = en.WriteString(z[zb0004].Name)
+		if err != nil {
+			err = msgp.WrapError(err, zb0004, "Name")
+			return
+		}
+		err = en.WriteString(z[zb0004].Value)
+		if err != nil {
+			err = msgp.WrapError(err, zb0004, "Value")
+			return
+		}
+	}
+	return
+}
+
+// MarshalMsg implements msgp.Marshaler
+func (z Labels) MarshalMsg(b []byte) (o []byte, err error) {
+	o = msgp.Require(b, z.Msgsize())
+	o = msgp.AppendArrayHeader(o, uint32(len(z)))
+	for zb0004 := range z {
+		// array header, size 2
+		o = append(o, 0x92)
+		o = msgp.AppendString(o, z[zb0004].Name)
+		o = msgp.AppendString(o, z[zb0004].Value)
+	}
+	return
+}
+
+// UnmarshalMsg implements msgp.Unmarshaler
+func (z *Labels) UnmarshalMsg(bts []byte) (o []byte, err error) {
+	var zb0002 uint32
+	zb0002, bts, err = msgp.ReadArrayHeaderBytes(bts)
+	if err != nil {
+		err = msgp.WrapError(err)
+		return
+	}
+	if cap((*z)) >= int(zb0002) {
+		(*z) = (*z)[:zb0002]
+	} else {
+		(*z) = make(Labels, zb0002)
+	}
+	for zb0001 := range *z {
+		var zb0003 uint32
+		zb0003, bts, err = msgp.ReadArrayHeaderBytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, zb0001)
+			return
+		}
+		if zb0003 != 2 {
+			err = msgp.ArrayError{Wanted: 2, Got: zb0003}
+			return
+		}
+		(*z)[zb0001].Name, bts, err = msgp.ReadStringBytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, zb0001, "Name")
+			return
+		}
+		(*z)[zb0001].Value, bts, err = msgp.ReadStringBytes(bts)
+		if err != nil {
+			err = msgp.WrapError(err, zb0001, "Value")
+			return
+		}
+	}
+	o = bts
+	return
+}
+
+// Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
+func (z Labels) Msgsize() (s int) {
+	s = msgp.ArrayHeaderSize
+	for zb0004 := range z {
+		s += 1 + msgp.StringPrefixSize + len(z[zb0004].Name) + msgp.StringPrefixSize + len(z[zb0004].Value)
+	}
+	return
+}
+
+// DecodeMsg implements msgp.Decodable
 func (z *Point) DecodeMsg(dc *msgp.Reader) (err error) {
 	var zb0001 uint32
 	zb0001, err = dc.ReadArrayHeader()
