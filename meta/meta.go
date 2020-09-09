@@ -162,9 +162,9 @@ func (m *meta) RefreshTopology() error {
 			shards[n.ShardID] = shard
 		}
 
-		if n.MasterIP == "" && n.MasterPort == "" {
+		if n.Role == RoleMaster {
 			shard.Master = &n
-		} else {
+		} else if n.Role == RoleSlave {
 			shard.Slaves = append(shard.Slaves, &n)
 		}
 	}
@@ -376,7 +376,7 @@ func FailoverIfNeeded(shardID string) {
 
 	failoverErr := mutexRun("failover", func(session *concurrency.Session) error {
 		master := GetMaster(shardID)
-		if master != nil && (shard.Master == nil || master.Addr() != shard.Master.Addr()) { //already failover by other gateway
+		if master != nil && (shard.Master == nil || master.Addr != shard.Master.Addr) { //already failover by other gateway
 			return nil
 		}
 
@@ -394,7 +394,7 @@ func FailoverIfNeeded(shardID string) {
 			}
 		}
 
-		slaveConn, err := tcp.Connect(chosen.Addr())
+		slaveConn, err := tcp.Connect(chosen.Addr)
 		if err != nil {
 			return errors.Wrap(err, "failed to connect to slave")
 		}
@@ -405,7 +405,7 @@ func FailoverIfNeeded(shardID string) {
 			return errors.Wrap(err, "failed to send slave of no one")
 		}
 
-		level.Warn(vars.Logger).Log("msg", "failover triggered", "shard", shardID, "chosen", chosen.Addr())
+		level.Warn(vars.Logger).Log("msg", "failover triggered", "shard", shardID, "chosen", chosen.Addr)
 
 		c := make(chan struct{})
 		go func() {
@@ -426,7 +426,7 @@ func FailoverIfNeeded(shardID string) {
 				if reply.Status != msg.StatusCode_Succeed {
 					err = errors.New(reply.Message)
 				} else {
-					level.Warn(vars.Logger).Log("msg", "failover succeed", "shard", shardID, "chosen", chosen.Addr())
+					level.Warn(vars.Logger).Log("msg", "failover succeed", "shard", shardID, "chosen", chosen.Addr)
 				}
 			}
 		}()

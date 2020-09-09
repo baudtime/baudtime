@@ -76,7 +76,7 @@ func (m seriesHashMap) del(hash uint64) {
 }
 
 const (
-	stripeSize = 1 << 12
+	stripeSize = 1 << 10
 	stripeMask = stripeSize - 1
 )
 
@@ -136,7 +136,7 @@ func (app *appender) Flush() error {
 		return nil
 	}
 
-	app.toFlush.Hashed = (differentHash == 1)
+	app.toFlush.Hashed = differentHash == 1
 	app.toFlush.HashCode = lastHash
 
 	err := app.client.Add(context.TODO(), &app.toFlush)

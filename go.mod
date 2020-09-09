@@ -10,6 +10,7 @@ require (
 	github.com/fsnotify/fsnotify v1.4.7
 	github.com/go-kit/kit v0.9.0
 	github.com/influxdata/influxdb1-client v0.0.0-20190809212627-fc22c7df067e
+	github.com/oklog/ulid v1.3.1
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/peterh/liner v1.1.0
 	github.com/philhofer/fwd v1.0.0

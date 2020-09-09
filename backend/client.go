@@ -109,10 +109,10 @@ func (c *ShardClient) Select(ctx context.Context, req *backendmsg.SelectRequest)
 	}
 
 	resp, err := c.exeQuery(shard, func(node *meta.Node) (msg.Message, error) {
-		if c.localStorage != nil && node.IP == vars.LocalIP && node.Port == vars.Cfg.TcpPort {
+		if c.localStorage != nil && node.Addr == vars.LocalAddr {
 			return c.localStorage.HandleSelectReq(req), nil
 		} else {
-			cli, err := defaultFactory.getClient(node.Addr())
+			cli, err := defaultFactory.getClient(node.Addr)
 			if err != nil {
 				return nil, err
 			}
@@ -157,10 +157,10 @@ func (c *ShardClient) LabelValues(ctx context.Context, req *backendmsg.LabelValu
 	}
 
 	resp, err := c.exeQuery(shard, func(node *meta.Node) (msg.Message, error) {
-		if c.localStorage != nil && node.IP == vars.LocalIP && node.Port == vars.Cfg.TcpPort {
+		if c.localStorage != nil && node.Addr == vars.LocalAddr {
 			return c.localStorage.HandleLabelValuesReq(req), nil
 		} else {
-			cli, err := defaultFactory.getClient(node.Addr())
+			cli, err := defaultFactory.getClient(node.Addr)
 			if err != nil {
 				return nil, err
 			}
@@ -189,7 +189,7 @@ func (c *ShardClient) Add(ctx context.Context, req *backendmsg.AddRequest) (err 
 
 	master := meta.GetMaster(c.shardID)
 	if master != nil {
-		if c.localStorage != nil && master.IP == vars.LocalIP && master.Port == vars.Cfg.TcpPort {
+		if c.localStorage != nil && master.Addr == vars.LocalAddr {
 			err = c.localStorage.HandleAddReq(req)
 			if err != nil {
 				return
@@ -210,7 +210,7 @@ func (c *ShardClient) Add(ctx context.Context, req *backendmsg.AddRequest) (err 
 		}
 
 		var cli *client.Client
-		if cli, err = defaultFactory.getClient(master.Addr()); err == nil {
+		if cli, err = defaultFactory.getClient(master.Addr); err == nil {
 			if vars.Cfg.Gateway.Appender.AsyncTransfer {
 				if err = cli.AsyncRequest(req, nil); err == nil {
 					return
@@ -241,7 +241,7 @@ func (c *ShardClient) Close() error {
 
 	master := meta.GetMaster(c.shardID)
 	if master != nil {
-		err := defaultFactory.destroy(master.Addr())
+		err := defaultFactory.destroy(master.Addr)
 		if err != nil {
 			multiErr = multierr.Append(multiErr, err)
 		}
@@ -250,7 +250,7 @@ func (c *ShardClient) Close() error {
 	slaves := meta.GetSlaves(c.shardID)
 	if len(slaves) > 0 {
 		for _, slave := range slaves {
-			err := defaultFactory.destroy(slave.Addr())
+			err := defaultFactory.destroy(slave.Addr)
 			if err != nil {
 				multiErr = multierr.Append(multiErr, err)
 			}

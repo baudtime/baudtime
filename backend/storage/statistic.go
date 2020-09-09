@@ -80,14 +80,13 @@ func (stat Stat) String() string {
 	lnBreak := byte('\n')
 
 	buf = append(append(append(buf, "Shard: "...), stat.Node.ShardID...), lnBreak)
-	buf = append(append(append(buf, "IP: "...), stat.Node.IP...), lnBreak)
-	buf = append(append(append(buf, "Port: "...), stat.Node.Port...), lnBreak)
+	buf = append(append(append(buf, "Role: "...), stat.Node.Role.String()...), lnBreak)
+	buf = append(append(append(buf, "Addr: "...), stat.Node.Addr...), lnBreak)
 	buf = append(append(append(append(buf, "DiskFree: "...), strconv.FormatUint(stat.Node.DiskFree, 10)...), "GB"...), lnBreak)
 	buf = append(append(append(buf, "IDC: "...), stat.Node.IDC...), lnBreak)
 
-	if stat.Node.MasterIP != "" && stat.Node.MasterPort != "" {
-		buf = append(append(append(buf, "MasterIP: "...), stat.Node.MasterIP...), lnBreak)
-		buf = append(append(append(buf, "MasterPort: "...), stat.Node.MasterPort...), lnBreak)
+	if stat.Node.Role == meta.RoleSlave {
+		buf = append(append(append(buf, "MasterAddr: "...), stat.Node.MasterAddr...), lnBreak)
 	}
 
 	if stat.DBStat != nil {

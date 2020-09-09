@@ -45,7 +45,8 @@ const (
 type Heartbeat struct {
 	db                 *tsdb.DB
 	masterAddr         string
-	relationID         string
+	shardID            string
+	epoch              int64
 	masterCli          *client.Client
 	closed             uint32
 	lastTSendHeartbeat int64
@@ -53,13 +54,14 @@ type Heartbeat struct {
 
 func (h *Heartbeat) start() {
 	if h.masterCli == nil {
-		h.masterCli = client.NewBackendClient("rpl_s2m", h.masterAddr, 3, 0)
+		h.masterCli = client.NewBackendClient("rpl_s2m", h.masterAddr, 1, 0)
 	}
 
 	heartbeat := &backendmsg.SyncHeartbeat{
 		MasterAddr:    h.masterAddr,
 		SlaveAddr:     fmt.Sprintf("%v:%v", LocalIP, Cfg.TcpPort),
-		RelationID:    h.relationID,
+		ShardID:       h.shardID,
+		Epoch:         h.epoch,
 		BlkSyncOffset: getStartSyncOffset(h.db.Blocks()),
 	}
 
@@ -90,51 +92,46 @@ func (h *Heartbeat) start() {
 			continue
 		}
 
-		if ack.BlkSyncOffset != heartbeat.BlkSyncOffset {
-			if ack.BlkSyncOffset == nil {
-				if heartbeat.BlkSyncOffset.Ulid != "" {
-					preBlockDir := filepath.Join(h.db.Dir(), heartbeat.BlkSyncOffset.Ulid)
-					fileutil.RenameFile(preBlockDir+".tmp", preBlockDir)
-					h.db.CleanTombstones() //h.db.Reload()
-				}
+		if ack.BlkSyncOffset == nil {
+			if heartbeat.BlkSyncOffset != nil && heartbeat.BlkSyncOffset.Ulid != "" {
+				preBlockDir := filepath.Join(h.db.Dir(), heartbeat.BlkSyncOffset.Ulid)
+				fileutil.RenameFile(preBlockDir+".tmp", preBlockDir)
+				h.db.CleanTombstones() //h.db.Reload()
+			}
 
-				if fileSyncing != nil {
-					fileSyncing.Close()
-					fileSyncing = nil
-				}
-			} else {
-				blockTmpDir := filepath.Join(h.db.Dir(), ack.BlkSyncOffset.Ulid) + ".tmp"
-				if ack.BlkSyncOffset.Ulid != heartbeat.BlkSyncOffset.Ulid {
-					preBlockDir := filepath.Join(h.db.Dir(), heartbeat.BlkSyncOffset.Ulid)
-					fileutil.RenameFile(preBlockDir+".tmp", preBlockDir)
+			if fileSyncing != nil {
+				fileSyncing.Close()
+				fileSyncing = nil
+			}
 
-					chunksDir := filepath.Join(blockTmpDir, "chunks")
-					if err := os.MkdirAll(chunksDir, 0777); err != nil {
-						level.Error(Logger).Log("msg", "can't create chunks dir", "error", err)
-						continue
-					}
-				}
-				if fileSyncing == nil {
-					fileSyncing, err = os.Create(filepath.Join(blockTmpDir, ack.BlkSyncOffset.Path))
-				} else if !strings.HasSuffix(fileSyncing.Name(), ack.BlkSyncOffset.Path) {
-					fileSyncing.Close()
-					fileSyncing, err = os.Create(filepath.Join(blockTmpDir, ack.BlkSyncOffset.Path))
-				}
+			time.Sleep(time.Duration(Cfg.Storage.Replication.HeartbeatInterval))
+			continue
+		} else {
+			blockTmpDir := filepath.Join(h.db.Dir(), ack.BlkSyncOffset.Ulid) + ".tmp"
+			if heartbeat.BlkSyncOffset != nil && heartbeat.BlkSyncOffset.Ulid != ack.BlkSyncOffset.Ulid {
+				preBlockDir := filepath.Join(h.db.Dir(), heartbeat.BlkSyncOffset.Ulid)
+				fileutil.RenameFile(preBlockDir+".tmp", preBlockDir)
 
-				if err != nil { //TODO
-					level.Error(Logger).Log("error", err, "block", ack.BlkSyncOffset.Ulid, "path", ack.BlkSyncOffset.Path)
+				chunksDir := filepath.Join(blockTmpDir, "chunks")
+				if err := os.MkdirAll(chunksDir, 0777); err != nil {
+					level.Error(Logger).Log("msg", "can't create chunks dir", "error", err)
 					continue
 				}
 			}
+			if fileSyncing == nil {
+				fileSyncing, err = os.Create(filepath.Join(blockTmpDir, ack.BlkSyncOffset.Path))
+			} else if !strings.HasSuffix(fileSyncing.Name(), ack.BlkSyncOffset.Path) {
+				fileSyncing.Close()
+				fileSyncing, err = os.Create(filepath.Join(blockTmpDir, ack.BlkSyncOffset.Path))
+			}
 
-			heartbeat.BlkSyncOffset = ack.BlkSyncOffset
+			if err != nil { //TODO
+				level.Error(Logger).Log("error", err, "block", ack.BlkSyncOffset.Ulid, "path", ack.BlkSyncOffset.Path)
+				continue
+			}
 		}
 
-		if ack.BlkSyncOffset == nil {
-			time.Sleep(time.Duration(Cfg.Storage.Replication.HeartbeatInterval))
-			continue
-		}
-
+		heartbeat.BlkSyncOffset = ack.BlkSyncOffset
 		for len(ack.Data) > 0 {
 			written, err := fileSyncing.Write(ack.Data)
 			heartbeat.BlkSyncOffset.Offset += int64(written)

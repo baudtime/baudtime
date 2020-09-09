@@ -21,14 +21,14 @@ var nodePfx, routeInfoPfx string
 
 func nodePrefix() string {
 	if nodePfx == "" {
-		nodePfx = vars.Cfg.NameSpace + "_node_"
+		nodePfx = "node_" + vars.Cfg.NameSpace + "_"
 	}
 	return nodePfx
 }
 
 func routeInfoPrefix() string {
 	if routeInfoPfx == "" {
-		routeInfoPfx = vars.Cfg.NameSpace + "_routeInfo_"
+		routeInfoPfx = "route_" + vars.Cfg.NameSpace + "_"
 	}
 	return routeInfoPfx
 }

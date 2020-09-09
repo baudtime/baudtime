@@ -7,3 +7,6 @@ type AdminCmdInfo struct {
 
 type AdminCmdJoinCluster struct {
 }
+
+type AdminCmdLeftCluster struct {
+}

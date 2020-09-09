@@ -139,7 +139,10 @@ func (obs *tcpServerObserver) OnAccept(tcpConn *net.TCPConn) *tcp.ReadWriteLoop 
 			}
 		case *backendmsg.AdminCmdJoinCluster:
 			obs.storage.ReplicateManager.JoinCluster()
-			response.SetRaw(&msg.GeneralResponse{Status: msg.StatusCode_Succeed, Message: obs.storage.ReplicateManager.RelationID()})
+			response.SetRaw(&msg.GeneralResponse{Status: msg.StatusCode_Succeed, Message: obs.storage.ReplicateManager.ShardID()})
+		case *backendmsg.AdminCmdLeftCluster:
+			obs.storage.ReplicateManager.LeftCluster()
+			response.SetRaw(&msg.GeneralResponse{Status: msg.StatusCode_Succeed, Message: obs.storage.ReplicateManager.ShardID()})
 		}
 
 		return response
@@ -171,6 +174,10 @@ func Run() {
 		router.GET("/joinCluster", func(ctx *fasthttp.RequestCtx) {
 			localStorage.ReplicateManager.JoinCluster()
 		})
+		router.GET("/leftCluster", func(ctx *fasthttp.RequestCtx) {
+			localStorage.ReplicateManager.LeftCluster()
+		})
+
 		router.GET("/stat", func(ctx *fasthttp.RequestCtx) {
 			if arg := ctx.QueryArgs().Peek("reset"); arg != nil {
 				localStorage.OpStat.Reset()

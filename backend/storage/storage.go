@@ -22,13 +22,11 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
-	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/allegro/bigcache/v2"
 	"github.com/baudtime/baudtime/backend/storage/replication"
-	"github.com/baudtime/baudtime/meta"
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/util"
@@ -471,22 +469,9 @@ func (storage *Storage) Info(detailed bool) (Stat, error) {
 		return stat, err
 	}
 
-	masterIP, masterPort := "", ""
-	found, masterAddr := storage.ReplicateManager.Master()
-	if found {
-		ipPort := strings.Split(masterAddr, ":")
-		masterIP = ipPort[0]
-		masterPort = ipPort[1]
-	}
-
-	stat.Node = meta.Node{
-		ShardID:    storage.ReplicateManager.RelationID(),
-		IP:         vars.LocalIP,
-		Port:       vars.Cfg.TcpPort,
-		DiskFree:   uint64(math.Round(float64(diskUsage.Free) / 1073741824.0)), //GB
-		MasterIP:   masterIP,
-		MasterPort: masterPort,
-	}
+	stat.Node.Addr = vars.LocalAddr
+	stat.Node.DiskFree = uint64(math.Round(float64(diskUsage.Free) / 1073741824.0)) //GB
+	stat.Node.ReplicaMeta = storage.ReplicateManager.Meta()
 
 	if !detailed {
 		return stat, nil

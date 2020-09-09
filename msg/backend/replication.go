@@ -40,9 +40,9 @@ type SyncHandshake struct {
 }
 
 type SyncHandshakeAck struct {
-	Status     HandshakeStatus `msg:"status"`
-	RelationID string          `msg:"relationID"`
-	Message    string          `msg:"message"`
+	Status  HandshakeStatus `msg:"status"`
+	ShardID string          `msg:"shardID"`
+	Message string          `msg:"message"`
 }
 
 type BlockSyncOffset struct {
@@ -56,7 +56,8 @@ type BlockSyncOffset struct {
 type SyncHeartbeat struct {
 	MasterAddr    string           `msg:"masterAddr"`
 	SlaveAddr     string           `msg:"slaveAddr"`
-	RelationID    string           `msg:"relationID"`
+	ShardID       string           `msg:"shardID"`
+	Epoch         int64            `msg:"epoch"`
 	BlkSyncOffset *BlockSyncOffset `msg:"blkSyncOffset"`
 }
 

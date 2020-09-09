@@ -18,11 +18,12 @@ package meta
 import (
 	"context"
 	"encoding/json"
+	"github.com/baudtime/baudtime/util/os/fileutil"
 	"google.golang.org/grpc"
-	"io"
-	"net"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -35,38 +36,103 @@ import (
 	"go.etcd.io/etcd/clientv3"
 )
 
-type Node struct {
-	ShardID    string
-	IP         string
-	Port       string
-	DiskFree   uint64
-	IDC        string
-	MasterIP   string
-	MasterPort string
-	addr       string    `json:"-"`
-	once       sync.Once `json:"-"`
+const replicationMeta = "replication.json"
+
+type Role byte
+
+const (
+	RoleUnset Role = iota
+	RoleMaster
+	RoleSlave
+)
+
+func (role Role) String() string {
+	switch role {
+	case RoleMaster:
+		return "Master"
+	case RoleSlave:
+		return "Slave"
+	}
+	return "Unset"
 }
 
-func (node *Node) Addr() string {
-	node.once.Do(func() {
-		if node.IP != "" && node.Port != "" {
-			var b strings.Builder
-			b.WriteString(node.IP)
-			b.WriteByte(':')
-			b.WriteString(node.Port)
-			node.addr = b.String()
+type ReplicaMeta struct {
+	ShardID    string `json:"shard_id"`
+	Role       Role   `json:"role"`
+	MasterAddr string `json:"master_addr,omitempty"`
+}
+
+func (meta *ReplicaMeta) LoadFromDisk(dir string) error {
+	b, err := ioutil.ReadFile(filepath.Join(dir, replicationMeta))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		} else {
+			return err
 		}
-	})
-	return node.addr
+	}
+
+	if err := json.Unmarshal(b, meta); err != nil {
+		return err
+	}
+
+	level.Info(vars.Logger).Log("msg", "replication meta id was loaded",
+		"ShardID", meta.ShardID,
+		"Role", meta.Role.String(),
+		"masterAddr", meta.MasterAddr,
+	)
+	return nil
+}
+
+func (meta *ReplicaMeta) StoreToDisk(dir string) error {
+	path := filepath.Join(dir, replicationMeta)
+	tmp := path + ".tmp"
+
+	f, err := os.Create(tmp)
+	if err != nil {
+		return err
+	}
+
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "\t")
+	err = enc.Encode(meta)
+	if err != nil {
+		f.Close()
+		return err
+	}
+
+	err = f.Close()
+	if err != nil {
+		return err
+	}
+
+	err = fileutil.RenameFile(tmp, path)
+	if err != nil {
+		return err
+	}
+
+	level.Info(vars.Logger).Log("msg", "replication meta id was stored",
+		"ShardID", meta.ShardID,
+		"Role", meta.Role.String(),
+		"masterAddr", meta.MasterAddr,
+	)
+
+	return nil
+}
+
+type Node struct {
+	Addr string `json:"addr"`
+	ReplicaMeta
+	DiskFree uint64 `json:"disk_free"`
+	IDC      string `json:"idc"`
 }
 
 func (node *Node) MayOnline() bool {
-	addr := node.Addr()
-	if util.Ping(addr) {
+	if util.Ping(node.Addr) {
 		return true
 	}
 
-	nodeExist, err := exist(nodePrefix() + addr)
+	nodeExist, err := exist(nodePrefix() + node.Addr)
 	if err != nil {
 		return true
 	}
@@ -123,7 +189,7 @@ func GetMasters() ([]Node, error) {
 
 	var masters Nodes
 	for _, node := range nodes {
-		if node.MasterIP == "" && node.MasterPort == "" && node.ShardID != "" {
+		if node.Role == RoleMaster && node.ShardID != "" {
 			masters = append(masters, node)
 		}
 	}
@@ -214,7 +280,7 @@ func (h *Heartbeat) Stop() {
 	if h.client != nil {
 		redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 			ctx, cancel := context.WithTimeout(h.client.Ctx(), time.Duration(vars.Cfg.Etcd.RWTimeout))
-			_, err := h.client.Delete(ctx, nodePrefix()+h.lastNodeInfo.Addr())
+			_, err := h.client.Delete(ctx, nodePrefix()+h.lastNodeInfo.Addr)
 			cancel()
 			if err != nil {
 				return true, err
@@ -228,13 +294,7 @@ func (h *Heartbeat) Stop() {
 }
 
 func (h *Heartbeat) keepLease() {
-	reConnect, reGrant := false, false
-
-	clientCfg := clientv3.Config{
-		Endpoints:   vars.Cfg.Etcd.Endpoints,
-		DialTimeout: time.Duration(vars.Cfg.Etcd.DialTimeout),
-		DialOptions: []grpc.DialOption{grpc.WithBlock()},
-	}
+	reGrant := false
 
 	for {
 		select {
@@ -242,24 +302,6 @@ func (h *Heartbeat) keepLease() {
 			level.Warn(vars.Logger).Log("msg", "keep lease for heartbeat exit!!!")
 			return
 		default:
-		}
-
-		if reConnect {
-			level.Warn(vars.Logger).Log("msg", "reconnect for heartbeat")
-			cli, err := clientv3.New(clientCfg)
-			if err != nil {
-				time.Sleep(2 * time.Second)
-				continue
-			}
-
-			h.cmtx.Lock()
-			if h.client != nil {
-				h.client.Close()
-			}
-			h.client = cli
-			h.cmtx.Unlock()
-
-			reConnect = false
 		}
 
 		if reGrant {
@@ -278,11 +320,7 @@ func (h *Heartbeat) keepLease() {
 		keepAlive, err := h.client.KeepAlive(ctx, h.leaseID)
 		if err != nil || keepAlive == nil {
 			cancel()
-			if _, ok := err.(net.Error); ok || err == io.EOF {
-				reConnect = true
-			} else {
-				reGrant = true
-			}
+			reGrant = true
 			continue
 		}
 
@@ -306,7 +344,6 @@ func (h *Heartbeat) keepLease() {
 			}
 		}
 
-		reConnect = true
 		reGrant = true
 	}
 }
@@ -321,7 +358,7 @@ func (h *Heartbeat) reportInfo(node Node) error {
 	if h.client != nil && h.leaseID != clientv3.NoLease {
 		err = redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 			ctx, cancel := context.WithTimeout(h.client.Ctx(), time.Duration(vars.Cfg.Etcd.RWTimeout))
-			_, er := h.client.Put(ctx, nodePrefix()+node.Addr(), string(b), clientv3.WithLease(h.leaseID))
+			_, er := h.client.Put(ctx, nodePrefix()+node.Addr, string(b), clientv3.WithLease(h.leaseID))
 			cancel()
 			if er != nil {
 				return true, er

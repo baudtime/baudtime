@@ -18,17 +18,7 @@ package replication
 import (
 	"context"
 	"fmt"
-	"io"
-	"math"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"sync"
-	"sync/atomic"
-	"time"
-	"unsafe"
-
+	"github.com/baudtime/baudtime/meta"
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/tcp/client"
@@ -38,28 +28,40 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/tsdb"
 	uuid "github.com/satori/go.uuid"
+	"io"
+	"math"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
 type ReplicateManager struct {
-	id                 *string
+	meta    meta.ReplicaMeta
+	metaMtx sync.RWMutex
+
 	db                 *tsdb.DB
 	sampleFeeds        *sync.Map //map[string]*sampleFeed
+	snapshot           *Snapshot
 	heartbeat          *Heartbeat
 	lastTRecvHeartbeat int64
+
 	sync.RWMutex
 }
 
 func NewReplicateManager(db *tsdb.DB) *ReplicateManager {
-	id, err := loadRelationID(db.Dir())
+	replicateMgr := &ReplicateManager{
+		sampleFeeds: new(sync.Map),
+		db:          db,
+		snapshot:    newSnapshot(db),
+	}
+
+	err := replicateMgr.loadMeta()
 	if err != nil {
 		panic(err)
 	}
 
-	return &ReplicateManager{
-		id:          id,
-		sampleFeeds: new(sync.Map),
-		db:          db,
-	}
+	return replicateMgr
 }
 
 func (mgr *ReplicateManager) HandleWriteReq(request []byte) {
@@ -105,141 +107,50 @@ func (mgr *ReplicateManager) HandleHeartbeat(heartbeat *backendmsg.SyncHeartbeat
 	}
 
 	if heartbeat.BlkSyncOffset == nil {
+		mgr.snapshot.Reset()
 		return &backendmsg.SyncHeartbeatAck{
 			Status: msg.StatusCode_Succeed,
 		}
 	}
 
-	block := getBlock(mgr.db.Blocks(), feed.createdTime, heartbeat.BlkSyncOffset.MinT)
-	if block == nil {
-		mgr.db.EnableCompactions()
-		return &backendmsg.SyncHeartbeatAck{
-			Status: msg.StatusCode_Succeed,
-		}
-	}
-
-	ulid := heartbeat.BlkSyncOffset.Ulid
-	minT := heartbeat.BlkSyncOffset.MinT
-	maxT := heartbeat.BlkSyncOffset.MaxT
-	path := heartbeat.BlkSyncOffset.Path
-	offset := heartbeat.BlkSyncOffset.Offset
-
-	if block.String() != ulid { //not found
-		ulid = block.String()
-		minT = block.MinTime()
-		maxT = block.MaxTime()
-		path = metaFileName
-		offset = 0
-	}
-
-	f, err := os.Open(filepath.Join(mgr.db.Dir(), ulid, path))
+	err := mgr.snapshot.Init(heartbeat.Epoch)
 	if err != nil {
 		return &backendmsg.SyncHeartbeatAck{
 			Status:  msg.StatusCode_Failed,
 			Message: err.Error(),
 		}
 	}
-	defer f.Close()
 
-	f.Seek(offset, 0)
+	syncOffset := heartbeat.BlkSyncOffset
 
-	bytes := make([]byte, 256*PageSize)
-
-	m, err := f.Read(bytes)
-	if err == nil {
-		return &backendmsg.SyncHeartbeatAck{
-			Status: msg.StatusCode_Succeed,
-			BlkSyncOffset: &backendmsg.BlockSyncOffset{
-				Ulid:   ulid,
-				MinT:   minT,
-				MaxT:   maxT,
-				Path:   path,
-				Offset: offset,
-			},
-			Data: bytes[:m],
-		}
-	}
-
-	if err != io.EOF {
-		return &backendmsg.SyncHeartbeatAck{
-			Status:  msg.StatusCode_Failed,
-			Message: err.Error(),
-		}
-	}
-
-	path, err = getNextPath(filepath.Join(mgr.db.Dir(), ulid), path)
+	data, err := mgr.snapshot.FetchData(syncOffset)
 	if err != nil {
 		return &backendmsg.SyncHeartbeatAck{
 			Status:  msg.StatusCode_Failed,
 			Message: err.Error(),
 		}
 	}
-	offset = 0
 
-	if path == "" {
-		block = getBlock(mgr.db.Blocks(), feed.createdTime, maxT)
-		if block == nil {
-			mgr.db.EnableCompactions()
-			return &backendmsg.SyncHeartbeatAck{
-				Status: msg.StatusCode_Succeed,
-			}
+	if len(data) > 0 {
+		return &backendmsg.SyncHeartbeatAck{
+			Status:        msg.StatusCode_Succeed,
+			BlkSyncOffset: syncOffset,
+			Data:          data,
 		}
+	}
 
-		ulid = block.String()
-		minT = block.MinTime()
-		maxT = block.MaxTime()
-		path = metaFileName
+	syncOffset, err = mgr.snapshot.CutOffset(syncOffset)
+	if err != nil {
+		return &backendmsg.SyncHeartbeatAck{
+			Status:  msg.StatusCode_Failed,
+			Message: err.Error(),
+		}
 	}
 
 	return &backendmsg.SyncHeartbeatAck{
-		Status: msg.StatusCode_Succeed,
-		BlkSyncOffset: &backendmsg.BlockSyncOffset{
-			Ulid:   ulid,
-			MinT:   minT,
-			MaxT:   maxT,
-			Path:   path,
-			Offset: offset,
-		},
+		Status:        msg.StatusCode_Succeed,
+		BlkSyncOffset: syncOffset,
 	}
-}
-
-func getBlock(blocks []*tsdb.Block, blockMaxTimeToSync int64, minTimeOfBlock int64) *tsdb.Block {
-	for _, block := range blocks {
-		if block.MaxTime() >= blockMaxTimeToSync {
-			break
-		}
-
-		if block.MinTime() >= minTimeOfBlock {
-			return block
-		}
-	}
-
-	return nil
-}
-
-func getNextPath(blockDir, currentPath string) (string, error) {
-	path := ""
-
-	if currentPath == metaFileName {
-		path = indexFileName
-	} else if currentPath == indexFileName {
-		path = tombstonesFileName
-	} else if currentPath == tombstonesFileName {
-		path = filepath.Join("chunks", fmt.Sprintf("%0.6d", 1))
-	} else {
-		i, err := strconv.ParseUint(strings.TrimPrefix(currentPath, "chunks"+string(os.PathSeparator)), 10, 64)
-		if err != nil {
-			return "", err
-		}
-
-		path = filepath.Join("chunks", fmt.Sprintf("%0.6d", i+1))
-	}
-
-	if _, err := os.Stat(filepath.Join(blockDir, path)); os.IsNotExist(err) {
-		return "", nil
-	}
-
-	return path, nil
 }
 
 func (mgr *ReplicateManager) HandleSyncHandshake(handshake *backendmsg.SyncHandshake) *backendmsg.SyncHandshakeAck {
@@ -251,14 +162,14 @@ func (mgr *ReplicateManager) HandleSyncHandshake(handshake *backendmsg.SyncHands
 			level.Info(Logger).Log("msg", "slave was removed", "slaveAddr", handshake.SlaveAddr)
 		}
 
-		return &backendmsg.SyncHandshakeAck{Status: backendmsg.HandshakeStatus_NoLongerMySlave, RelationID: mgr.RelationID()}
+		return &backendmsg.SyncHandshakeAck{Status: backendmsg.HandshakeStatus_NoLongerMySlave, ShardID: mgr.ShardID()}
 	}
 
 	if handshake.BlocksMinT != math.MinInt64 && handshake.BlocksMinT < blocksMinTime(mgr.db) {
 		return &backendmsg.SyncHandshakeAck{
-			Status:     backendmsg.HandshakeStatus_FailedToSync,
-			RelationID: mgr.RelationID(),
-			Message:    fmt.Sprintf("dirty, not clean, master's minT: %v, slave's minT: %v", blocksMinTime(mgr.db), handshake.BlocksMinT),
+			Status:  backendmsg.HandshakeStatus_FailedToSync,
+			ShardID: mgr.ShardID(),
+			Message: fmt.Sprintf("dirty, not clean, master's minT: %v, slave's minT: %v", blocksMinTime(mgr.db), handshake.BlocksMinT),
 		}
 	}
 
@@ -268,14 +179,12 @@ func (mgr *ReplicateManager) HandleSyncHandshake(handshake *backendmsg.SyncHands
 		feed := NewSampleFeed(handshake.SlaveAddr, int(Cfg.Storage.Replication.HandleOffSize))
 		mgr.sampleFeeds.Store(handshake.SlaveAddr, feed)
 
-		mgr.db.DisableCompactions() //TODO multi slave
-
-		return &backendmsg.SyncHandshakeAck{Status: backendmsg.HandshakeStatus_NewSlave, RelationID: mgr.RelationID()}
+		return &backendmsg.SyncHandshakeAck{Status: backendmsg.HandshakeStatus_NewSlave, ShardID: mgr.ShardID()}
 	} else {
 		feed.(*sampleFeed).FlushIfNeeded()
 	}
 
-	return &backendmsg.SyncHandshakeAck{Status: backendmsg.HandshakeStatus_AlreadyMySlave, Message: "already my slave", RelationID: mgr.RelationID()}
+	return &backendmsg.SyncHandshakeAck{Status: backendmsg.HandshakeStatus_AlreadyMySlave, Message: "already my slave", ShardID: mgr.ShardID()}
 }
 
 func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfCommand) *msg.GeneralResponse {
@@ -288,6 +197,11 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfComm
 			ack, err := mgr.syncHandshake(mgr.heartbeat.masterAddr, true)
 			mgr.heartbeat = nil
 
+			mgr.storeMeta(meta.ReplicaMeta{
+				ShardID: mgr.ShardID(),
+				Role:    meta.RoleMaster,
+			})
+
 			if err != nil {
 				return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: err.Error()}
 			}
@@ -295,8 +209,6 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfComm
 			if ack.Status != backendmsg.HandshakeStatus_NoLongerMySlave {
 				return &msg.GeneralResponse{Status: msg.StatusCode_Failed, Message: fmt.Sprintf("status:%s, message:%s", ack.Status, ack.Message)}
 			}
-			//atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id)), nil)
-
 			return &msg.GeneralResponse{Status: msg.StatusCode_Succeed}
 		} else if mgr.heartbeat.masterAddr == slaveOfCmd.MasterAddr {
 			return &msg.GeneralResponse{Status: msg.StatusCode_Succeed, Message: "already my slave"}
@@ -305,7 +217,10 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfComm
 		}
 	} else {
 		if slaveOfCmd.MasterAddr == "" { //slaveof no one
-			//atomic.StorePointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id)), nil)
+			mgr.storeMeta(meta.ReplicaMeta{
+				ShardID: mgr.ShardID(),
+				Role:    meta.RoleMaster,
+			})
 			return &msg.GeneralResponse{Status: msg.StatusCode_Succeed}
 		} else {
 			ack, err := mgr.syncHandshake(slaveOfCmd.MasterAddr, false)
@@ -324,10 +239,17 @@ func (mgr *ReplicateManager) HandleSlaveOfCmd(slaveOfCmd *backendmsg.SlaveOfComm
 				level.Info(Logger).Log("msg", "already an slave of the master", "masterAddr", slaveOfCmd.MasterAddr)
 			}
 
+			mgr.storeMeta(meta.ReplicaMeta{
+				ShardID:    ack.ShardID,
+				Role:       meta.RoleSlave,
+				MasterAddr: slaveOfCmd.MasterAddr,
+			})
+
 			mgr.heartbeat = &Heartbeat{
 				db:         mgr.db,
 				masterAddr: slaveOfCmd.MasterAddr,
-				relationID: ack.RelationID,
+				shardID:    ack.ShardID,
+				epoch:      t.FromTime(time.Now()),
 			}
 			go mgr.heartbeat.start()
 
@@ -356,16 +278,12 @@ func (mgr *ReplicateManager) syncHandshake(masterAddr string, slaveOfNoOne bool)
 		return nil, errors.New("unexpected response")
 	}
 
-	relationID := mgr.RelationID()
-	if relationID == "" {
-		if mgr.joinCluster(ack.RelationID) {
-			return ack, nil
-		}
-	} else if relationID == ack.RelationID {
-		return ack, nil
+	myShardID := mgr.ShardID()
+	if myShardID != "" && myShardID != ack.ShardID {
+		return nil, errors.New("unexpected relation id")
 	}
 
-	return nil, errors.New("unexpected relation id")
+	return ack, nil
 }
 
 func (mgr *ReplicateManager) Master() (found bool, masterAddr string) {
@@ -384,25 +302,42 @@ func (mgr *ReplicateManager) Slaves() (slaveAddrs []string) {
 	return
 }
 
-func (mgr *ReplicateManager) JoinCluster() bool {
-	rid := strings.Replace(uuid.NewV1().String(), "-", "", -1)
-	return mgr.joinCluster(rid)
+func (mgr *ReplicateManager) Meta() (m meta.ReplicaMeta) {
+	mgr.metaMtx.RLock()
+	m = mgr.meta
+	mgr.metaMtx.RUnlock()
+	return
 }
 
-func (mgr *ReplicateManager) joinCluster(rid string) bool {
-	if atomic.CompareAndSwapPointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id)), nil, unsafe.Pointer(&rid)) {
-		storeRelationID(mgr.db.Dir(), rid)
-		return true
+func (mgr *ReplicateManager) JoinCluster() {
+	shardID := mgr.ShardID()
+	if len(shardID) == 0 {
+		shardID = strings.Replace(uuid.NewV1().String(), "-", "", -1)
 	}
-	return false
+	mgr.storeMeta(meta.ReplicaMeta{
+		ShardID: shardID,
+		Role:    meta.RoleMaster,
+	})
 }
 
-func (mgr *ReplicateManager) RelationID() (rid string) {
-	id := (*string)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&mgr.id))))
-	if id != nil {
-		return *id
+func (mgr *ReplicateManager) LeftCluster() {
+	if mgr.heartbeat != nil {
+		mgr.heartbeat.stop()
+		mgr.syncHandshake(mgr.heartbeat.masterAddr, true)
+
+		mgr.Lock()
+		mgr.heartbeat = nil
+		mgr.Unlock()
 	}
-	return ""
+	mgr.storeMeta(meta.ReplicaMeta{
+		ShardID:    "",
+		Role:       meta.RoleUnset,
+		MasterAddr: "",
+	})
+}
+
+func (mgr *ReplicateManager) ShardID() string {
+	return mgr.Meta().ShardID
 }
 
 func (mgr *ReplicateManager) Close() error {
@@ -418,4 +353,26 @@ func (mgr *ReplicateManager) LastHeartbeatTime() (recv, send int64) {
 		send = atomic.LoadInt64(&mgr.heartbeat.lastTSendHeartbeat)
 	}
 	return
+}
+
+func (mgr *ReplicateManager) storeMeta(m meta.ReplicaMeta) error {
+	mgr.metaMtx.Lock()
+	defer mgr.metaMtx.Unlock()
+	mgr.meta = m
+	return mgr.meta.StoreToDisk(mgr.db.Dir())
+}
+
+func (mgr *ReplicateManager) loadMeta() error {
+	mgr.metaMtx.Lock()
+	defer mgr.metaMtx.Unlock()
+	return mgr.meta.LoadFromDisk(mgr.db.Dir())
+}
+
+func blocksMinTime(db *tsdb.DB) int64 {
+	blocks := db.Blocks()
+	if len(blocks) > 0 {
+		return blocks[0].MinTime()
+	}
+
+	return math.MinInt64
 }

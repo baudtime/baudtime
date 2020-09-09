@@ -68,6 +68,13 @@ func (e *executor) execCommand(args []string) error {
 		}
 
 		return e.execComand(&backendmsg.AdminCmdJoinCluster{})
+	case "leftcluster":
+		if len(args) != 0 {
+			printCommandHelp(cmd)
+			return nil
+		}
+
+		return e.execComand(&backendmsg.AdminCmdLeftCluster{})
 	case "info":
 		if len(args) != 0 {
 			printCommandHelp(cmd)
@@ -258,12 +265,14 @@ func (e *executor) execComand(cmd msg.Message) error {
 				}
 			} else {
 				fmt.Println("error occurred!", r.Message)
+				return errors.New(r.Message)
 			}
 		case *msg.LabelValuesResponse:
 			if r.Status == msg.StatusCode_Succeed {
 				fmt.Println(r.Values)
 			} else {
 				fmt.Println(r.ErrorMsg)
+				return errors.New(r.ErrorMsg)
 			}
 		default:
 			fmt.Print("invalid reply")

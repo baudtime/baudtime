@@ -47,6 +47,7 @@ const (
 	ConnCtrlType
 	GeneralResponseType
 	LabelValuesResponseType
+	BackendAdminCmdLeftClusterType
 )
 
 var (
@@ -101,6 +102,8 @@ func Type(m msg.Message) MsgType {
 		return GeneralResponseType
 	case *msg.LabelValuesResponse:
 		return LabelValuesResponseType
+	case *backend.AdminCmdLeftCluster:
+		return BackendAdminCmdLeftClusterType
 	}
 
 	return BadMsgType
@@ -146,6 +149,8 @@ func Get(t MsgType) msg.Message {
 		return new(backend.AdminCmdInfo)
 	case BackendAdminCmdJoinClusterType:
 		return new(backend.AdminCmdJoinCluster)
+	case BackendAdminCmdLeftClusterType:
+		return new(backend.AdminCmdLeftCluster)
 	//other
 	case ConnCtrlType:
 		return new(msg.ConnCtrl)

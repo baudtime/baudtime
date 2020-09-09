@@ -21,6 +21,7 @@ var helpCommands = [][]string{
 	{"WRITEPOINT", "metric{l=v, l=v} value timestamp", ""},
 	{"LABELVALS", "name start end", "Server"},
 	{"JOINCLUSTER", "-", "Server"},
+	{"LEFTCLUSTER", "-", "Server"},
 	{"INFO", "-", "Server"},
 	{"PING", "-", "Server"},
 }

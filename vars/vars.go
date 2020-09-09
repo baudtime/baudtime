@@ -20,6 +20,7 @@ var (
 	Logger         log.Logger
 	LogWriter      io.Writer
 	LocalIP        string
+	LocalAddr      string
 	PageSize       = os.Getpagesize()
 )
 
@@ -80,4 +81,6 @@ func Init() {
 	if err = LoadConfig(ConfigFilePath); err != nil {
 		panic(err)
 	}
+
+	LocalAddr = LocalIP + ":" + Cfg.TcpPort
 }
