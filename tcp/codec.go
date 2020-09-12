@@ -16,11 +16,13 @@
 package tcp
 
 import (
+	"encoding/binary"
 	"github.com/baudtime/baudtime/msg"
 	"github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/msg/gateway"
-	"sync"
 )
+
+type MsgType uint8
 
 const (
 	//gateway
@@ -48,11 +50,8 @@ const (
 	GeneralResponseType
 	LabelValuesResponseType
 	BackendAdminCmdLeftClusterType
-)
-
-var (
-	gatewayAddRequestPool = sync.Pool{New: func() interface{} { return new(gateway.AddRequest) }}
-	backendAddRequestPool = sync.Pool{New: func() interface{} { return new(backend.AddRequest) }}
+	//error
+	BadMsgType MsgType = 255
 )
 
 func Type(m msg.Message) MsgType {
@@ -95,6 +94,8 @@ func Type(m msg.Message) MsgType {
 		return BackendAdminCmdInfoType
 	case *backend.AdminCmdJoinCluster:
 		return BackendAdminCmdJoinClusterType
+	case *backend.AdminCmdLeftCluster:
+		return BackendAdminCmdLeftClusterType
 	//other
 	case *msg.ConnCtrl:
 		return ConnCtrlType
@@ -102,18 +103,89 @@ func Type(m msg.Message) MsgType {
 		return GeneralResponseType
 	case *msg.LabelValuesResponse:
 		return LabelValuesResponseType
-	case *backend.AdminCmdLeftCluster:
-		return BackendAdminCmdLeftClusterType
 	}
 
 	return BadMsgType
 }
 
-func Get(t MsgType) msg.Message {
+type MsgCodec struct {
+	reusableGatewayAddReq    *gateway.AddRequest
+	gatewayAddReqReusedCount int
+	reusableBackendAddReq    *backend.AddRequest
+	backendAddReqReusedCount int
+}
+
+func (codec *MsgCodec) Encode(msg Message, b []byte) (int, error) {
+	raw := msg.GetRaw()
+	written := 0
+
+	b[written] = byte(Type(raw))
+	written++
+
+	n := binary.PutUvarint(b[written:written+binary.MaxVarintLen64], msg.Opaque)
+	written += n
+
+	if raw != nil {
+		if cap(b)-written < raw.Msgsize() {
+			return 0, MsgSizeOverflow
+		}
+
+		o, err := raw.MarshalMsg(b[written:written])
+		if err != nil {
+			return 0, err
+		}
+		written += len(o)
+	}
+
+	return written, nil
+}
+
+func (codec *MsgCodec) Decode(b []byte) (Message, error) {
+	var (
+		err error
+		msg Message
+	)
+
+	//get message type
+	msgType := MsgType(b[0])
+
+	//get message opaque
+	l := 1 + binary.MaxVarintLen64
+	if len(b) < l {
+		l = len(b)
+	}
+	opaque, n := binary.Uvarint(b[1:l])
+	if n <= 0 {
+		return msg, BadMsgFormat
+	}
+
+	//get message proto
+	raw := codec.get(msgType)
+	if raw != nil {
+		_, err = raw.UnmarshalMsg(b[1+n:])
+	}
+
+	if err != nil {
+		return msg, err
+	}
+
+	msg.SetOpaque(opaque)
+	msg.SetRaw(raw)
+
+	return msg, nil
+}
+
+func (codec *MsgCodec) get(t MsgType) msg.Message {
 	switch t {
 	//gateway
 	case GatewayAddRequestType:
-		return gatewayAddRequestPool.Get().(*gateway.AddRequest)
+		if codec.reusableGatewayAddReq == nil || codec.gatewayAddReqReusedCount > 2048 {
+			codec.reusableGatewayAddReq = new(gateway.AddRequest)
+			codec.gatewayAddReqReusedCount = 0
+		} else {
+			codec.gatewayAddReqReusedCount++
+		}
+		return codec.reusableGatewayAddReq
 	case GatewayInstantQueryRequestType:
 		return new(gateway.InstantQueryRequest)
 	case GatewayRangeQueryRequestType:
@@ -128,7 +200,13 @@ func Get(t MsgType) msg.Message {
 		return new(gateway.LabelValuesRequest)
 	//backend
 	case BackendAddRequestType:
-		return backendAddRequestPool.Get().(*backend.AddRequest)
+		if codec.reusableBackendAddReq == nil || codec.backendAddReqReusedCount > 2048 {
+			codec.reusableBackendAddReq = new(backend.AddRequest)
+			codec.backendAddReqReusedCount = 0
+		} else {
+			codec.backendAddReqReusedCount++
+		}
+		return codec.reusableBackendAddReq
 	case BackendSelectRequestType:
 		return new(backend.SelectRequest)
 	case BackendSelectResponseType:
@@ -161,13 +239,4 @@ func Get(t MsgType) msg.Message {
 	}
 
 	return nil
-}
-
-func Put(m msg.Message) {
-	switch req := m.(type) {
-	case *gateway.AddRequest:
-		gatewayAddRequestPool.Put(req)
-	case *backend.AddRequest:
-		backendAddRequestPool.Put(req)
-	}
 }

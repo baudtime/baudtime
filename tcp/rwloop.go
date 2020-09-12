@@ -111,8 +111,6 @@ func (loop *ReadWriteLoop) LoopRead() {
 		}
 
 		out := loop.handle(ctx, in, inBytes)
-		Put(in.GetRaw())
-
 		if loop.WriteClosed() || out == EmptyMsg {
 			continue
 		}
