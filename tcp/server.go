@@ -120,14 +120,18 @@ func (s *TcpServer) Run() {
 			s.wg.Add(1)
 			go func() {
 				l.LoopWrite()
-				s.removeLoop(l)
+				if !l.IsRunning() {
+					s.removeLoop(l)
+				}
 				s.wg.Done()
 			}()
 
 			s.wg.Add(1)
 			go func() {
 				l.LoopRead()
-				s.removeLoop(l)
+				if !l.IsRunning() {
+					s.removeLoop(l)
+				}
 				s.wg.Done()
 			}()
 		}
