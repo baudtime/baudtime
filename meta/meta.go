@@ -29,7 +29,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/tcp"
 	"github.com/baudtime/baudtime/vars"
@@ -41,10 +40,11 @@ import (
 )
 
 type Shard struct {
-	ID          string
-	Master      *Node
-	Slaves      []*Node
-	failovering uint32
+	ID           string
+	Master       *Node
+	Slaves       []*Node
+	failovering  uint32
+	lastFailover time.Time
 }
 
 //meta's responsibility is to provide our necessary data
@@ -137,7 +137,11 @@ func (m *meta) GetShard(shardID string) (shard *Shard, found bool) {
 
 func (m *meta) AllShards() map[string]*Shard {
 	shards := (*map[string]*Shard)(atomic.LoadPointer(&m.shards))
-	return *shards
+	if shards != nil {
+		return *shards
+	} else {
+		return nil
+	}
 }
 
 func (m *meta) RefreshTopology() error {
@@ -166,6 +170,16 @@ func (m *meta) RefreshTopology() error {
 			shard.Master = &n
 		} else if n.Role == RoleSlave {
 			shard.Slaves = append(shard.Slaves, &n)
+		}
+	}
+
+	old := m.AllShards()
+	if len(old) > 0 {
+		for k, v := range shards {
+			if sh, found := old[k]; found {
+				v.failovering = sh.failovering
+				v.lastFailover = sh.lastFailover
+			}
 		}
 	}
 
@@ -263,22 +277,30 @@ func (m *meta) watch() {
 					}
 				}
 			case wresp = <-nch:
-				for _, ev := range wresp.Events {
-					if ev.Type == mvccpb.DELETE && ev.PrevKv != nil {
-						level.Warn(vars.Logger).Log(
-							"msg", "get etcd event",
-							"type", ev.Type,
-							"key", ev.Kv.Key,
-							"value", ev.Kv.Value,
-							"preKey", ev.PrevKv.Key,
-							"preValue", ev.PrevKv.Value,
-						)
+				for {
+					for _, ev := range wresp.Events {
+						if ev.Type == mvccpb.DELETE && ev.PrevKv != nil {
+							level.Warn(vars.Logger).Log(
+								"msg", "get etcd event",
+								"type", ev.Type,
+								"key", ev.Kv.Key,
+								"value", ev.Kv.Value,
+								"preKey", ev.PrevKv.Key,
+								"preValue", ev.PrevKv.Value,
+							)
 
-						var node Node
-						if err = json.Unmarshal(ev.PrevKv.Value, &node); err == nil {
-							FailoverIfNeeded(node.ShardID)
+							var node Node
+							if err = json.Unmarshal(ev.PrevKv.Value, &node); err == nil {
+								FailoverIfNeeded(node.ShardID)
+							}
 						}
 					}
+					select {
+					case wresp = <-nch:
+						continue
+					default:
+					}
+					break
 				}
 				m.RefreshTopology()
 			}
@@ -349,7 +371,10 @@ func FailoverIfNeeded(shardID string) {
 	}
 
 	if shard.Master == nil {
-		globalMeta.RefreshTopology()
+		err := globalMeta.RefreshTopology()
+		if err != nil {
+			return
+		}
 		if shard.Master != nil {
 			return
 		}
@@ -374,7 +399,11 @@ func FailoverIfNeeded(shardID string) {
 	}
 	defer atomic.StoreUint32(&shard.failovering, 0)
 
-	failoverErr := mutexRun("failover", func(session *concurrency.Session) error {
+	if time.Since(shard.lastFailover) < 10*time.Second {
+		return
+	}
+
+	failoverErr := mutexRun(shardID, func(session *concurrency.Session) error {
 		master := GetMaster(shardID)
 		if master != nil && (shard.Master == nil || master.Addr != shard.Master.Addr) { //already failover by other gateway
 			return nil
@@ -402,44 +431,28 @@ func FailoverIfNeeded(shardID string) {
 
 		err = slaveConn.WriteMsg(slaveOfReqBytes[:n])
 		if err != nil {
+			return err
+		}
+		err = slaveConn.Flush()
+		if err != nil {
 			return errors.Wrap(err, "failed to send slave of no one")
 		}
 
 		level.Warn(vars.Logger).Log("msg", "failover triggered", "shard", shardID, "chosen", chosen.Addr)
 
-		c := make(chan struct{})
-		go func() {
-			defer close(c)
-
-			slaveOfRespBytes, er := slaveConn.ReadMsg()
-			if er != nil {
-				return
-			}
-
-			reply, er := msgCodec.Decode(slaveOfRespBytes)
-			if raw := reply.GetRaw(); er == nil && raw != nil {
-				reply, ok := raw.(*msg.GeneralResponse)
-				if !ok {
-					return
-				}
-
-				if reply.Status != msg.StatusCode_Succeed {
-					err = errors.New(reply.Message)
-				} else {
-					level.Warn(vars.Logger).Log("msg", "failover succeed", "shard", shardID, "chosen", chosen.Addr)
-				}
-			}
-		}()
-
-		select {
-		case <-c:
-		case <-time.After(15 * time.Second):
-		}
+		<-time.After(30 * time.Second)
 
 		globalMeta.RefreshTopology()
 
-		return err
+		master = GetMaster(shardID)
+		if master != nil && master.Addr == chosen.Addr { //already get master
+			level.Info(vars.Logger).Log("msg", "failover succeed", "shard", shardID, "new_master", master.Addr)
+		}
+
+		return nil
 	})
+
+	shard.lastFailover = time.Now()
 
 	if failoverErr != nil {
 		level.Error(vars.Logger).Log("msg", "error occurred when failover", "shard", shardID, "err", failoverErr)

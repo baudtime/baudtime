@@ -19,6 +19,7 @@ import (
 	"github.com/baudtime/baudtime/msg"
 	"github.com/cespare/xxhash/v2"
 	"net"
+	"time"
 	"unsafe"
 )
 
@@ -45,6 +46,17 @@ func Ping(addr string) (ok bool) {
 
 	tcpConn.Close()
 	return true
+}
+
+func Exponential(d, min, max time.Duration) time.Duration {
+	d *= 2
+	if d < min {
+		d = min
+	}
+	if d > max {
+		d = max
+	}
+	return d
 }
 
 func Max(a, b int64) int64 {

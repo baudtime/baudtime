@@ -278,7 +278,7 @@ func (h *Heartbeat) Stop() {
 	h.wg.Wait()
 
 	if h.client != nil {
-		redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
+		redo.RetryExponential(vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 			ctx, cancel := context.WithTimeout(h.client.Ctx(), time.Duration(vars.Cfg.Etcd.RWTimeout))
 			_, err := h.client.Delete(ctx, nodePrefix()+h.lastNodeInfo.Addr)
 			cancel()
@@ -295,6 +295,7 @@ func (h *Heartbeat) Stop() {
 
 func (h *Heartbeat) keepLease() {
 	reGrant := false
+	holdOn := time.Second
 
 	for {
 		select {
@@ -308,9 +309,11 @@ func (h *Heartbeat) keepLease() {
 			level.Warn(vars.Logger).Log("msg", "regrant for heartbeat")
 			leaseResp, err := h.client.Grant(context.Background(), h.leaseTTL)
 			if err != nil {
-				time.Sleep(2 * time.Second)
+				holdOn = util.Exponential(holdOn, 2*time.Second, 32*time.Second)
+				time.Sleep(holdOn)
 				continue
 			}
+			holdOn = time.Second
 
 			h.leaseID = leaseResp.ID
 			reGrant = false
@@ -356,22 +359,14 @@ func (h *Heartbeat) reportInfo(node Node) error {
 
 	h.cmtx.RLock()
 	if h.client != nil && h.leaseID != clientv3.NoLease {
-		err = redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
-			ctx, cancel := context.WithTimeout(h.client.Ctx(), time.Duration(vars.Cfg.Etcd.RWTimeout))
-			_, er := h.client.Put(ctx, nodePrefix()+node.Addr, string(b), clientv3.WithLease(h.leaseID))
-			cancel()
-			if er != nil {
-				return true, er
-			}
-			return false, nil
-		})
+		ctx, cancel := context.WithTimeout(h.client.Ctx(), time.Duration(vars.Cfg.Etcd.RWTimeout))
+		_, err = h.client.Put(ctx, nodePrefix()+node.Addr, string(b), clientv3.WithLease(h.leaseID))
+		cancel()
 	}
 	h.cmtx.RUnlock()
 
 	if err == nil {
 		h.lastNodeInfo = node
-	} else if h.cancel != nil {
-		h.cancel() //let reconnect and keep lease again
 	}
 
 	return err

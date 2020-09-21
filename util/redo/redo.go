@@ -16,6 +16,7 @@
 package redo
 
 import (
+	"github.com/baudtime/baudtime/util"
 	"time"
 )
 
@@ -58,6 +59,24 @@ func Retry(interval time.Duration, count int, f func() (bool, error)) error {
 		if retry, err = f(); !retry {
 			return err
 		}
+		time.Sleep(interval)
+	}
+	return err
+}
+
+func RetryExponential(count int, f func() (bool, error)) error {
+	var (
+		retry       = true
+		err         error
+		interval    = 2 * time.Second
+		minInterval = 2 * time.Second
+		maxInterval = 64 * time.Second
+	)
+	for i := 0; i < count; i++ {
+		if retry, err = f(); !retry {
+			return err
+		}
+		interval = util.Exponential(interval, minInterval, maxInterval)
 		time.Sleep(interval)
 	}
 	return err

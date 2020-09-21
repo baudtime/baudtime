@@ -75,7 +75,7 @@ var (
 func exist(k string) (bool, error) {
 	var resp *clientv3.GetResponse
 
-	er := redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
+	er := redo.RetryExponential(vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 		cli, err := clientRef.Ref()
 		if err != nil {
 			return true, err
@@ -97,7 +97,7 @@ func exist(k string) (bool, error) {
 }
 
 func etcdGet(k string, v interface{}) error {
-	return redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
+	return redo.RetryExponential(vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 		cli, err := clientRef.Ref()
 		if err != nil {
 			return true, err
@@ -136,7 +136,7 @@ func etcdGet(k string, v interface{}) error {
 
 func etcdGetWithPrefix(prefix string) (*clientv3.GetResponse, error) {
 	var resp *clientv3.GetResponse
-	er := redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
+	er := redo.RetryExponential(vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 		cli, err := clientRef.Ref()
 		if err != nil {
 			return true, err
@@ -162,7 +162,7 @@ func etcdGetWithPrefix(prefix string) (*clientv3.GetResponse, error) {
 }
 
 func etcdPut(k string, v interface{}, leaseID clientv3.LeaseID) error {
-	return redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
+	return redo.RetryExponential(vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 		var (
 			b   []byte
 			err error
@@ -200,7 +200,7 @@ func etcdPut(k string, v interface{}, leaseID clientv3.LeaseID) error {
 }
 
 func etcdDel(k string) error {
-	return redo.Retry(time.Duration(vars.Cfg.Etcd.RetryInterval), vars.Cfg.Etcd.RetryNum, func() (bool, error) {
+	return redo.RetryExponential(vars.Cfg.Etcd.RetryNum, func() (bool, error) {
 		cli, err := clientRef.Ref()
 		if err != nil {
 			return true, err

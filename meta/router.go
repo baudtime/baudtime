@@ -31,6 +31,11 @@ var (
 	routingKey   = "__rk__"
 )
 
+var (
+	errNoShards         = errors.New("no shards")
+	errCreateShardGroup = errors.New("can't create a new shard group")
+)
+
 //router's responsibility is computing
 type router struct {
 	meta *meta
@@ -42,6 +47,10 @@ func Router() *router {
 
 //used by write
 func (r *router) GetShardIDByLabels(t time.Time, lbls []msg.Label, hash uint64, createIfAbsent bool) (string, error) {
+	if len(r.meta.AllShards()) == 0 {
+		return "", errNoShards
+	}
+
 	n := tickNO(t)
 
 	shardGroup, err := r.meta.getShardGroup(n)
@@ -56,7 +65,7 @@ func (r *router) GetShardIDByLabels(t time.Time, lbls []msg.Label, hash uint64, 
 				return "", err
 			}
 			if len(shardGroup) == 0 {
-				return "", errors.New("can't create a new shard group")
+				return "", errCreateShardGroup
 			}
 		} else {
 			return "", nil
@@ -96,6 +105,10 @@ func (r *router) GetShardIDsByTime(t time.Time, matchers ...*labels.Matcher) ([]
 
 //used by query
 func (r *router) GetShardIDsByTimeSpan(from, to time.Time, matchers ...*labels.Matcher) ([]string, error) {
+	if len(r.meta.AllShards()) == 0 {
+		return nil, errNoShards
+	}
+
 	var multiErr error
 
 	shardNum := len(r.meta.AllShards())
