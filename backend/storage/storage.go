@@ -496,6 +496,7 @@ func (storage *Storage) Info(detailed bool) (Stat, error) {
 		AppenderMinValidTime: appMinValidTime,
 		LastRecvHb:           recvTimeHb,
 		LastSendHb:           sendTimeHb,
+		SnapSyncOffset:       storage.ReplicateManager.SnapshotSyncProgress(),
 	}
 
 	return stat, nil

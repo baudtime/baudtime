@@ -31,9 +31,15 @@ type Snapshot struct {
 	epoch   int64
 	db      *tsdb.DB
 	snapDir string
+	blocks  []*tsdb.BlockMeta
+
 	current currentFile
 	buf     []byte
+
 	snapMtx sync.RWMutex
+
+	progress    backendmsg.BlockSyncOffset
+	progressMtx sync.RWMutex
 }
 
 func newSnapshot(db *tsdb.DB) *Snapshot {
@@ -60,6 +66,13 @@ func (s *Snapshot) Init(epoch int64) error {
 			return errors.Wrap(err, "snapshotting failed")
 		}
 
+		blockMetas, err := s.snapshotMeta(snapDir)
+		if err != nil {
+			os.RemoveAll(snapDir)
+			return err
+		}
+
+		s.blocks = blockMetas
 		s.snapDir = snapDir
 		s.epoch = epoch
 	}
@@ -70,6 +83,10 @@ func (s *Snapshot) Reset() {
 	s.snapMtx.Lock()
 	s.reset()
 	s.snapMtx.Unlock()
+
+	s.progressMtx.Lock()
+	s.progress = backendmsg.BlockSyncOffset{}
+	s.progressMtx.Unlock()
 }
 
 func (s *Snapshot) reset() {
@@ -84,6 +101,10 @@ func (s *Snapshot) reset() {
 }
 
 func (s *Snapshot) FetchData(offset *backendmsg.BlockSyncOffset) ([]byte, error) {
+	s.progressMtx.Lock()
+	s.progress = *offset
+	s.progressMtx.Unlock()
+
 	s.snapMtx.Lock()
 	defer s.snapMtx.Unlock()
 
@@ -132,7 +153,7 @@ func (s *Snapshot) CutOffset(syncOffset *backendmsg.BlockSyncOffset) (*backendms
 	defer s.snapMtx.RUnlock()
 
 	if syncOffset.Ulid == "" {
-		block := s.nextBlock(syncOffset.MinT, syncOffset.Ulid)
+		block := s.nextBlock(syncOffset.MinT)
 		if block == nil {
 			return nil, nil
 		}
@@ -148,7 +169,7 @@ func (s *Snapshot) CutOffset(syncOffset *backendmsg.BlockSyncOffset) (*backendms
 		}
 
 		if path == "" {
-			block := s.nextBlock(syncOffset.MinT, syncOffset.Ulid)
+			block := s.nextBlock(syncOffset.MinT)
 			if block == nil {
 				return nil, nil
 			}
@@ -167,23 +188,31 @@ func (s *Snapshot) CutOffset(syncOffset *backendmsg.BlockSyncOffset) (*backendms
 	return syncOffset, nil
 }
 
-func (s *Snapshot) nextBlock(mint int64, ulid string) *tsdb.BlockMeta {
-	blockMetas, err := s.snapshotMeta()
-	if err != nil {
+func (s *Snapshot) Progress() (progre backendmsg.BlockSyncOffset) {
+	s.progressMtx.RLock()
+	progre = s.progress
+	s.progressMtx.RUnlock()
+	return
+}
+
+func (s *Snapshot) nextBlock(mint int64) *tsdb.BlockMeta {
+	if len(s.blocks) == 0 {
 		return nil
 	}
 
-	for _, block := range blockMetas {
-		if block.MinTime >= s.epoch {
-			break
-		}
+	blk := s.blocks[0]
 
-		if block.MinTime >= mint && block.ULID.String() != ulid {
-			return block
-		}
+	if len(s.blocks) > 1 {
+		s.blocks = s.blocks[1:]
+	} else {
+		s.blocks = s.blocks[:0]
 	}
 
-	return nil
+	if blk.MaxTime >= mint {
+		return blk
+	} else {
+		return s.nextBlock(mint)
+	}
 }
 
 func (s *Snapshot) nextPath(ulid string, currentPath string) (string, error) {
@@ -217,8 +246,8 @@ func (s *Snapshot) nextPath(ulid string, currentPath string) (string, error) {
 	return path, nil
 }
 
-func (s *Snapshot) snapshotMeta() (blockMetas []*tsdb.BlockMeta, err error) {
-	bDirs, err := blockDirs(s.snapDir)
+func (s *Snapshot) snapshotMeta(dir string) (blockMetas []*tsdb.BlockMeta, err error) {
+	bDirs, err := blockDirs(dir)
 	if err != nil {
 		return nil, errors.Wrap(err, "find blocks")
 	}

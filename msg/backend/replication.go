@@ -3,6 +3,7 @@
 package backend
 
 import (
+	"fmt"
 	"github.com/baudtime/baudtime/msg"
 )
 
@@ -51,6 +52,14 @@ type BlockSyncOffset struct {
 	MaxT   int64  `msg:"maxT"`
 	Path   string `msg:"path"`
 	Offset int64  `msg:"Offset"`
+}
+
+func (offset BlockSyncOffset) String() string {
+	var empty BlockSyncOffset
+	if offset == empty {
+		return "Unset"
+	}
+	return fmt.Sprintf("[%s, %s, %d]", offset.Ulid, offset.Path, offset.Offset)
 }
 
 type SyncHeartbeat struct {

@@ -18,10 +18,8 @@ package replication
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -104,6 +102,7 @@ func (h *Heartbeat) start() {
 				fileSyncing = nil
 			}
 
+			heartbeat.BlkSyncOffset = nil
 			time.Sleep(time.Duration(Cfg.Storage.Replication.HeartbeatInterval))
 			continue
 		} else {
@@ -129,9 +128,9 @@ func (h *Heartbeat) start() {
 				level.Error(Logger).Log("error", err, "block", ack.BlkSyncOffset.Ulid, "path", ack.BlkSyncOffset.Path)
 				continue
 			}
+			heartbeat.BlkSyncOffset = ack.BlkSyncOffset
 		}
 
-		heartbeat.BlkSyncOffset = ack.BlkSyncOffset
 		for len(ack.Data) > 0 {
 			written, err := fileSyncing.Write(ack.Data)
 			heartbeat.BlkSyncOffset.Offset += int64(written)
@@ -162,32 +161,7 @@ func getStartSyncOffset(blocks []*tsdb.Block) *backendmsg.BlockSyncOffset {
 	}
 
 	lastBlock := blocks[len(blocks)-1]
+	os.RemoveAll(lastBlock.Dir())
 
-	files, err := ioutil.ReadDir(filepath.Join(lastBlock.Dir(), "chunks"))
-	if err != nil {
-		panic(err)
-	}
-
-	var (
-		max       uint64
-		lastChunk os.FileInfo
-	)
-	for _, fi := range files {
-		if i, err := strconv.ParseUint(fi.Name(), 10, 64); err == nil && i > max {
-			max = i
-			lastChunk = fi
-		}
-	}
-
-	if lastChunk == nil {
-		panic("not clean, please delete " + lastBlock.Dir())
-	}
-
-	return &backendmsg.BlockSyncOffset{
-		Ulid:   lastBlock.String(),
-		MinT:   lastBlock.MinTime(),
-		MaxT:   lastBlock.MaxTime(),
-		Path:   filepath.Join("chunks", lastChunk.Name()),
-		Offset: lastChunk.Size(),
-	}
+	return &backendmsg.BlockSyncOffset{MinT: lastBlock.MinTime()}
 }

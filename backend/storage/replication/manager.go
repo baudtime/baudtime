@@ -280,7 +280,7 @@ func (mgr *ReplicateManager) syncHandshake(masterAddr string, slaveOfNoOne bool)
 
 	myShardID := mgr.ShardID()
 	if myShardID != "" && myShardID != ack.ShardID {
-		return nil, errors.New("unexpected relation id")
+		return nil, errors.New("shard id is not matched")
 	}
 
 	return ack, nil
@@ -344,6 +344,11 @@ func (mgr *ReplicateManager) Close() error {
 	if mgr.heartbeat != nil {
 		mgr.heartbeat.stop()
 	}
+	mgr.sampleFeeds.Range(func(name, feed interface{}) bool {
+		feed.(*sampleFeed).Close()
+		mgr.sampleFeeds.Delete(name)
+		return true
+	})
 	return nil
 }
 
@@ -353,6 +358,10 @@ func (mgr *ReplicateManager) LastHeartbeatTime() (recv, send int64) {
 		send = atomic.LoadInt64(&mgr.heartbeat.lastTSendHeartbeat)
 	}
 	return
+}
+
+func (mgr *ReplicateManager) SnapshotSyncProgress() backendmsg.BlockSyncOffset {
+	return mgr.snapshot.Progress()
 }
 
 func (mgr *ReplicateManager) storeMeta(m meta.ReplicaMeta) error {

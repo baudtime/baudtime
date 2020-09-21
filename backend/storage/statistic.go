@@ -16,12 +16,14 @@
 package storage
 
 import (
-	"github.com/baudtime/baudtime/meta"
-	"github.com/baudtime/baudtime/util"
-	tm "github.com/baudtime/baudtime/util/time"
 	"strconv"
 	"sync/atomic"
 	"time"
+
+	"github.com/baudtime/baudtime/meta"
+	backendmsg "github.com/baudtime/baudtime/msg/backend"
+	"github.com/baudtime/baudtime/util"
+	tm "github.com/baudtime/baudtime/util/time"
 )
 
 type OPStat struct {
@@ -68,6 +70,7 @@ type DBStat struct {
 	AppenderMinValidTime int64
 	LastRecvHb           int64
 	LastSendHb           int64
+	SnapSyncOffset       backendmsg.BlockSyncOffset
 }
 
 type Stat struct {
@@ -90,6 +93,7 @@ func (stat Stat) String() string {
 	}
 
 	if stat.DBStat != nil {
+		buf = append(append(buf, lnBreak), lnBreak)
 		buf = append(append(append(buf, "SucceedSel: "...), strconv.FormatUint(stat.OpStat.SucceedSel, 10)...), lnBreak)
 		buf = append(append(append(buf, "FailedSel: "...), strconv.FormatUint(stat.OpStat.FailedSel, 10)...), lnBreak)
 		buf = append(append(append(buf, "SucceedLVals: "...), strconv.FormatUint(stat.OpStat.SucceedLVals, 10)...), lnBreak)
@@ -110,8 +114,14 @@ func (stat Stat) String() string {
 		buf = append(append(append(buf, "HeadMaxTime: "...), formatTimestamp(stat.HeadMaxTime)...), lnBreak)
 		buf = append(append(append(buf, "HeadMinValidTime: "...), formatTimestamp(stat.HeadMinValidTime)...), lnBreak)
 		buf = append(append(append(buf, "AppenderMinValidTime: "...), formatTimestamp(stat.AppenderMinValidTime)...), lnBreak)
-		buf = append(append(append(buf, "LastRecvHb: "...), formatTimestamp(stat.LastRecvHb)...), lnBreak)
-		buf = append(append(buf, "LastSendHb: "...), formatTimestamp(stat.LastSendHb)...)
+
+		if stat.Node.Role == meta.RoleMaster && stat.LastRecvHb > 0 {
+			buf = append(append(append(buf, "LastRecvHb: "...), formatTimestamp(stat.LastRecvHb)...), lnBreak)
+			buf = append(append(append(buf, "SnapSyncOffset: "...), stat.SnapSyncOffset.String()...), lnBreak)
+		}
+		if stat.Node.Role == meta.RoleSlave && stat.LastSendHb > 0 {
+			buf = append(append(buf, "LastSendHb: "...), formatTimestamp(stat.LastSendHb)...)
+		}
 	}
 
 	return util.YoloString(buf)
