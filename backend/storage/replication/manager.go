@@ -165,14 +165,6 @@ func (mgr *ReplicateManager) HandleSyncHandshake(handshake *backendmsg.SyncHands
 		return &backendmsg.SyncHandshakeAck{Status: backendmsg.HandshakeStatus_NoLongerMySlave, ShardID: mgr.ShardID()}
 	}
 
-	if handshake.BlocksMinT != math.MinInt64 && handshake.BlocksMinT < blocksMinTime(mgr.db) {
-		return &backendmsg.SyncHandshakeAck{
-			Status:  backendmsg.HandshakeStatus_FailedToSync,
-			ShardID: mgr.ShardID(),
-			Message: fmt.Sprintf("dirty, not clean, master's minT: %v, slave's minT: %v", blocksMinTime(mgr.db), handshake.BlocksMinT),
-		}
-	}
-
 	feed, found := mgr.sampleFeeds.Load(handshake.SlaveAddr)
 	if !found { //to be new slave
 		mgr.JoinCluster()

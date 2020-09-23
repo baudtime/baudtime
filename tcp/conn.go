@@ -16,6 +16,7 @@
 package tcp
 
 import (
+	"bufio"
 	"encoding/binary"
 	"io"
 	"net"
@@ -23,34 +24,27 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/philhofer/fwd"
 	"golang.org/x/time/rate"
 )
 
 type Conn struct {
-	*fwd.Reader
-	*fwd.Writer
+	*bufio.Reader
+	*bufio.Writer
 	raw         *net.TCPConn
-	wBuf        []byte
+	rBuf        []byte
+	rlBuf       []byte
+	wlBuf       []byte
 	rateLimiter *rate.Limiter
 }
 
 func NewConn(c *net.TCPConn) *Conn {
-	f, err := c.File()
-	if err != nil {
-		panic(err)
-	}
-	fd := int(f.Fd())
-
-	rw := &readWriter{
-		fd: fd,
-		f:  f,
-	}
 	return &Conn{
-		Reader: fwd.NewReaderSize(rw, 1e5), // We make a buffered Reader & Writer to reduce syscalls.
-		Writer: fwd.NewWriterSize(rw, 1e4),
+		Reader: bufio.NewReaderSize(c, 6*1e5), // We make a buffered Reader & Writer to reduce syscalls.
+		Writer: bufio.NewWriterSize(c, 2*1e5),
 		raw:    c,
-		wBuf:   make([]byte, 4),
+		rBuf:   make([]byte, 2*1e5),
+		rlBuf:  make([]byte, 4),
+		wlBuf:  make([]byte, 4),
 	}
 }
 
@@ -79,13 +73,13 @@ func Connect(address string) (*Conn, error) {
 }
 
 func (c *Conn) ReadMsg() ([]byte, error) {
-	buf, err := c.Reader.Next(4)
+	_, err := io.ReadFull(c.Reader, c.rlBuf)
 	if err != nil {
 		return nil, err
 	}
 
 	//read message length
-	msgLen := int(binary.BigEndian.Uint32(buf))
+	msgLen := int(binary.BigEndian.Uint32(c.rlBuf))
 	if msgLen < 2 { // one byte is type, one byte is at least for opaque
 		return nil, io.ErrUnexpectedEOF
 	}
@@ -95,14 +89,25 @@ func (c *Conn) ReadMsg() ([]byte, error) {
 		time.Sleep(c.rateLimiter.ReserveN(now, 4+msgLen).DelayFrom(now))
 	}
 
-	return c.Reader.Next(msgLen)
+	rBuf := c.rBuf
+	if cap(rBuf) < msgLen {
+		rBuf = bytesPool.Get(msgLen).([]byte)
+		defer bytesPool.Put(rBuf)
+	}
+
+	_, err = io.ReadFull(c.Reader, rBuf[:msgLen])
+	if err != nil {
+		return nil, err
+	}
+
+	return rBuf[:msgLen], nil
 }
 
 func (c *Conn) WriteMsg(msg []byte) error {
-	binary.BigEndian.PutUint32(c.wBuf[:4], uint32(len(msg)))
+	binary.BigEndian.PutUint32(c.wlBuf[:4], uint32(len(msg)))
 
 	//write message length
-	_, err := c.Writer.Write(c.wBuf[:4])
+	_, err := c.Writer.Write(c.wlBuf[:4])
 	if err != nil {
 		return err
 	}
