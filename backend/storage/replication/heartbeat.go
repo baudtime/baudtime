@@ -94,7 +94,6 @@ func (h *Heartbeat) start() {
 			if heartbeat.BlkSyncOffset != nil && heartbeat.BlkSyncOffset.Ulid != "" {
 				preBlockDir := filepath.Join(h.db.Dir(), heartbeat.BlkSyncOffset.Ulid)
 				fileutil.RenameFile(preBlockDir+".tmp", preBlockDir)
-				h.db.CleanTombstones() //h.db.Reload()
 			}
 
 			if fileSyncing != nil {
