@@ -66,6 +66,8 @@ func (h *Heartbeat) start() {
 	var fileSyncing *os.File
 	var sleepTime = time.Second
 
+	h.db.DisableCompactions()
+
 	for h.isRunning() {
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
 		reply, err := h.masterCli.SyncRequest(ctx, heartbeat)
@@ -94,6 +96,7 @@ func (h *Heartbeat) start() {
 			if heartbeat.BlkSyncOffset != nil && heartbeat.BlkSyncOffset.Ulid != "" {
 				preBlockDir := filepath.Join(h.db.Dir(), heartbeat.BlkSyncOffset.Ulid)
 				fileutil.RenameFile(preBlockDir+".tmp", preBlockDir)
+				h.db.EnableCompactions()
 			}
 
 			if fileSyncing != nil {

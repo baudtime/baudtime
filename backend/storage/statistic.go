@@ -64,6 +64,7 @@ type DBStat struct {
 	OpStat               OPStat
 	SeriesNum            uint64
 	BlockNum             int
+	AutoCompact          bool
 	HeadMinTime          int64
 	HeadMaxTime          int64
 	HeadMinValidTime     int64
@@ -108,8 +109,10 @@ func (stat Stat) String() string {
 		buf = append(append(append(buf, "LastOutOfOrder: "...), formatTimestamp(stat.OpStat.LastOutOfOrder)...), lnBreak)
 		buf = append(append(append(buf, "LastAmendSample: "...), formatTimestamp(stat.OpStat.LastAmendSample)...), lnBreak)
 		buf = append(append(append(buf, "LastOutOfBounds: "...), formatTimestamp(stat.OpStat.LastOutOfBounds)...), lnBreak)
+		buf = append(append(buf, lnBreak), lnBreak)
 		buf = append(append(append(buf, "SeriesNum: "...), strconv.FormatUint(stat.SeriesNum, 10)...), lnBreak)
 		buf = append(append(append(buf, "BlockNum: "...), strconv.Itoa(stat.BlockNum)...), lnBreak)
+		buf = append(append(append(buf, "AutoCompact: "...), strconv.FormatBool(stat.AutoCompact)...), lnBreak)
 		buf = append(append(append(buf, "HeadMinTime: "...), formatTimestamp(stat.HeadMinTime)...), lnBreak)
 		buf = append(append(append(buf, "HeadMaxTime: "...), formatTimestamp(stat.HeadMaxTime)...), lnBreak)
 		buf = append(append(append(buf, "HeadMinValidTime: "...), formatTimestamp(stat.HeadMinValidTime)...), lnBreak)

@@ -478,6 +478,7 @@ func (storage *Storage) Info(detailed bool) (Stat, error) {
 	}
 
 	recvTimeHb, sendTimeHb := storage.ReplicateManager.LastHeartbeatTime()
+	autoCompact := reflect.ValueOf(storage.DB).Elem().FieldByName("autoCompact").Bool()
 	headMinT := storage.DB.Head().MinTime()
 	headMaxT := storage.DB.Head().MaxTime()
 	headMinValidTime := reflect.ValueOf(storage.DB.Head()).Elem().FieldByName("minValidTime").Int()
@@ -490,6 +491,7 @@ func (storage *Storage) Info(detailed bool) (Stat, error) {
 		OpStat:               *storage.OpStat,
 		SeriesNum:            storage.DB.Head().NumSeries(),
 		BlockNum:             len(storage.DB.Blocks()),
+		AutoCompact:          autoCompact,
 		HeadMinTime:          headMinT,
 		HeadMaxTime:          headMaxT,
 		HeadMinValidTime:     headMinValidTime,
