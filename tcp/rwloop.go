@@ -47,6 +47,7 @@ type ReadWriteLoop struct {
 }
 
 func (loop *ReadWriteLoop) LoopWrite() {
+	var err error
 	block := true
 
 	for loop.IsRunning() && !loop.WriteClosed() {
@@ -58,21 +59,22 @@ func (loop *ReadWriteLoop) LoopWrite() {
 				continue
 			}
 
-			err := loop.conn.WriteMsg(bytes)
+			err = loop.conn.WriteMsg(bytes)
 			bytesPool.Put(bytes)
-			if err != nil {
-				if _, ok := err.(net.Error); ok || err == io.EOF || err == io.ErrUnexpectedEOF {
-					loop.Exit()
-					return
-				}
-
-				level.Error(Logger).Log("msg", "write loop responsing client failed", "err", err)
-			}
 
 			block = false
 		} else if !block {
-			loop.conn.Flush()
+			err = loop.conn.Flush()
 			block = true
+		}
+
+		if err != nil {
+			if _, ok := err.(net.Error); ok || err == io.EOF || err == io.ErrUnexpectedEOF {
+				loop.Exit()
+				return
+			}
+
+			level.Error(Logger).Log("msg", "write loop responsing client failed", "err", err)
 		}
 	}
 }
