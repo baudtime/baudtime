@@ -9,6 +9,7 @@ import (
 	osutil "github.com/baudtime/baudtime/util/os"
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
+	"github.com/prometheus/client_golang/prometheus"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -22,6 +23,7 @@ var (
 	LocalIP        string
 	LocalAddr      string
 	PageSize       = os.Getpagesize()
+	PromRegistry   = prometheus.NewRegistry()
 )
 
 func Init() {
@@ -83,4 +85,6 @@ func Init() {
 	}
 
 	LocalAddr = LocalIP + ":" + Cfg.TcpPort
+
+	//PromRegistry.MustRegister(prometheus.NewGoCollector())
 }

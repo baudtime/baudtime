@@ -20,10 +20,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"github.com/baudtime/baudtime/util/syn"
-	"reflect"
-	"sync"
-
 	"github.com/baudtime/baudtime/backend/storage"
 	"github.com/baudtime/baudtime/backend/visitor"
 	"github.com/baudtime/baudtime/meta"
@@ -31,10 +27,14 @@ import (
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/tcp"
 	"github.com/baudtime/baudtime/tcp/client"
+	"github.com/baudtime/baudtime/util/syn"
 	"github.com/baudtime/baudtime/vars"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/multierr"
+	"reflect"
+	"sync"
 )
 
 type Client interface {
@@ -45,33 +45,73 @@ type Client interface {
 	Name() string
 }
 
-type clientFactory struct {
+type opMetrics struct {
+	activeSel    prometheus.Gauge
+	activeAdd    prometheus.Gauge
+}
+
+func newOpMetrics(address string) *opMetrics {
+	m := &opMetrics{}
+	constLabels := prometheus.Labels{
+		"addr": address,
+	}
+	m.activeSel = prometheus.NewGauge(prometheus.GaugeOpts{
+		Subsystem:   "gateway",
+		Name:        "datanode_active_select_total",
+		ConstLabels: constLabels,
+	})
+	m.activeAdd = prometheus.NewGauge(prometheus.GaugeOpts{
+		Subsystem:   "gateway",
+		Name:        "datanode_active_add_total",
+		ConstLabels: constLabels,
+	})
+
+	vars.PromRegistry.MustRegister(
+		m.activeSel,
+		m.activeAdd,
+	)
+	return m
+}
+
+type metricClient struct {
+	*client.Client
+	metric *opMetrics
+}
+
+type metricClientFactory struct {
 	clients sync.Map
 }
 
-func (factory *clientFactory) getClient(address string) (*client.Client, error) {
+func (factory *metricClientFactory) getClient(address string) (*metricClient, error) {
 	cli, found := factory.clients.Load(address)
 	if !found {
-		newCli := client.NewBackendClient("backend_cli_+"+address, address, vars.Cfg.Gateway.ReadConnsPerBackend, vars.Cfg.Gateway.WriteConnsPerBackend)
+		newCli := &metricClient{
+			Client: client.NewBackendClient(
+				"backend_cli_+"+address, address,
+				vars.Cfg.Gateway.ReadConnsPerBackend,
+				vars.Cfg.Gateway.WriteConnsPerBackend,
+			),
+			metric: newOpMetrics(address),
+		}
 		if cli, found = factory.clients.LoadOrStore(address, newCli); found {
 			_ = newCli.Close()
 		}
 	}
 
-	return cli.(*client.Client), nil
+	return cli.(*metricClient), nil
 }
 
-func (factory *clientFactory) destroy(address string) (err error) {
+func (factory *metricClientFactory) destroy(address string) (err error) {
 	cli, found := factory.clients.Load(address)
 	if found {
 		factory.clients.Delete(address)
-		err = cli.(*client.Client).Close()
+		err = cli.(*metricClient).Close()
 	}
 	return
 }
 
 var (
-	defaultFactory clientFactory
+	defaultFactory metricClientFactory
 	bytesPool      = syn.NewBucketizedPool(1e3, 1e7, 4, false, func(s int) interface{} { return make([]byte, s) }, func() syn.Bucket {
 		return new(sync.Pool)
 	})
@@ -117,7 +157,11 @@ func (c *ShardClient) Select(ctx context.Context, req *backendmsg.SelectRequest)
 				return nil, err
 			}
 
-			return cli.SyncRequest(ctx, req)
+			cli.metric.activeSel.Inc()
+			resp, err := cli.SyncRequest(ctx, req)
+			cli.metric.activeSel.Dec()
+
+			return resp, err
 		}
 	})
 
@@ -209,15 +253,24 @@ func (c *ShardClient) Add(ctx context.Context, req *backendmsg.AddRequest) (err 
 			return
 		}
 
-		var cli *client.Client
+		var cli *metricClient
 		if cli, err = defaultFactory.getClient(master.Addr); err == nil {
 			if vars.Cfg.Gateway.Appender.AsyncTransfer {
-				if err = cli.AsyncRequest(req, nil); err == nil {
+				cli.metric.activeAdd.Inc()
+				err = cli.AsyncRequest(req, nil)
+				cli.metric.activeAdd.Dec()
+
+				if err == nil {
 					return
 				}
 			} else {
 				var resp msg.Message
-				if resp, err = cli.SyncRequest(ctx, req); err == nil {
+
+				cli.metric.activeAdd.Inc()
+				resp, err = cli.SyncRequest(ctx, req)
+				cli.metric.activeAdd.Dec()
+
+				if err == nil {
 					generalResp, ok := resp.(*msg.GeneralResponse)
 					if !ok {
 						return tcp.BadMsgFormat

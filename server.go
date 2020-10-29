@@ -37,7 +37,9 @@ import (
 	. "github.com/baudtime/baudtime/vars"
 	"github.com/buaazp/fasthttprouter"
 	"github.com/go-kit/kit/log/level"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/valyala/fasthttp"
+	"github.com/valyala/fasthttp/fasthttpadaptor"
 	"github.com/valyala/fasthttp/pprofhandler"
 	"golang.org/x/time/rate"
 )
@@ -240,6 +242,7 @@ func Run() {
 
 	httpServer := &fasthttp.Server{}
 	go func() {
+		router.GET("/metrics", fasthttpadaptor.NewFastHTTPHandler(promhttp.HandlerFor(PromRegistry, promhttp.HandlerOpts{})))
 		httpServer.Handler = func(ctx *fasthttp.RequestCtx) {
 			if strings.HasPrefix(string(ctx.Path()), "/debug/pprof") {
 				pprofhandler.PprofHandler(ctx)

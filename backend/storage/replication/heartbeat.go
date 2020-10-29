@@ -63,10 +63,12 @@ func (h *Heartbeat) start() {
 		BlkSyncOffset: getStartSyncOffset(h.db.Blocks()),
 	}
 
-	var fileSyncing *os.File
-	var sleepTime = time.Second
-
 	h.db.DisableCompactions()
+	var (
+		fileSyncing           *os.File
+		sleepTime             = time.Second
+		needEnableCompactions = true
+	)
 
 	for h.isRunning() {
 		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
@@ -96,12 +98,16 @@ func (h *Heartbeat) start() {
 			if heartbeat.BlkSyncOffset != nil && heartbeat.BlkSyncOffset.Ulid != "" {
 				preBlockDir := filepath.Join(h.db.Dir(), heartbeat.BlkSyncOffset.Ulid)
 				fileutil.RenameFile(preBlockDir+".tmp", preBlockDir)
-				h.db.EnableCompactions()
 			}
 
 			if fileSyncing != nil {
 				fileSyncing.Close()
 				fileSyncing = nil
+			}
+
+			if needEnableCompactions {
+				h.db.EnableCompactions()
+				needEnableCompactions = false
 			}
 
 			heartbeat.BlkSyncOffset = nil

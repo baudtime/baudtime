@@ -24,6 +24,8 @@ import (
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/util"
 	tm "github.com/baudtime/baudtime/util/time"
+	"github.com/baudtime/baudtime/vars"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 type OPStat struct {
@@ -58,6 +60,132 @@ func (stat *OPStat) Reset() {
 	atomic.StoreInt64(&stat.LastOutOfOrder, 0)
 	atomic.StoreInt64(&stat.LastAmendSample, 0)
 	atomic.StoreInt64(&stat.LastOutOfBounds, 0)
+}
+
+func (stat *OPStat) RegistryPromMetric() {
+	constLabels := prometheus.Labels{
+		"addr": vars.LocalAddr,
+	}
+
+	succeedSel := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_succeed_sel_count",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadUint64(&stat.SucceedSel))
+	})
+
+	failedSel := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_failed_sel_count",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadUint64(&stat.FailedSel))
+	})
+
+	succeedLVals := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_succeed_lvals_count",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadUint64(&stat.SucceedLVals))
+	})
+
+	failedLVals := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_failed_lvals_count",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadUint64(&stat.FailedLVals))
+	})
+
+	receivedAdd := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_received_add_count",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadUint64(&stat.ReceivedAdd))
+	})
+
+	succeedAdd := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_succeed_add_count",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadUint64(&stat.SucceedAdd))
+	})
+
+	failedAdd := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_failed_add_count",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadUint64(&stat.FailedAdd))
+	})
+
+	outOfOrder := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_outoforder_count",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadUint64(&stat.OutOfOrder))
+	})
+
+	amendSample := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_amend_sample_count",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadUint64(&stat.AmendSample))
+	})
+
+	outOfBounds := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_outofbounds_count",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadUint64(&stat.OutOfBounds))
+	})
+
+	failedCommit := prometheus.NewCounterFunc(prometheus.CounterOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_failed_commit_count",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadUint64(&stat.FailedCommit))
+	})
+
+	lastOutOfOrder := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_last_outoforder_timestamp",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadInt64(&stat.LastOutOfOrder))
+	})
+
+	lastAmendSample := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_last_amend_sample_timestamp",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadInt64(&stat.LastAmendSample))
+	})
+
+	lastOutOfBounds := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Subsystem:   "datanode",
+		Name:        "datanode_last_outofbounds_timestamp",
+		ConstLabels: constLabels,
+	}, func() float64 {
+		return float64(atomic.LoadInt64(&stat.LastOutOfBounds))
+	})
+
+	vars.PromRegistry.MustRegister(
+		succeedSel, failedSel,
+		succeedLVals, failedLVals,
+		receivedAdd, succeedAdd, failedAdd,
+		outOfOrder, amendSample, outOfBounds, failedCommit,
+		lastOutOfOrder, lastAmendSample, lastOutOfBounds,
+	)
 }
 
 type DBStat struct {

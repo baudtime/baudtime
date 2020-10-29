@@ -15,6 +15,7 @@ require (
 	github.com/peterh/liner v1.1.0
 	github.com/philhofer/fwd v1.0.0
 	github.com/pkg/errors v0.8.1
+	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/common v0.6.0
 	github.com/prometheus/prometheus v2.10.0+incompatible
 	github.com/prometheus/tsdb v0.10.0

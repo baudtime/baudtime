@@ -55,6 +55,9 @@ func (s *Snapshot) Init(epoch int64) error {
 
 	if s.epoch != epoch {
 		s.reset()
+		defer func() {
+			s.epoch = epoch
+		}()
 
 		snapDir := filepath.Join(s.db.Dir(), fmt.Sprintf("rpl_%d", epoch))
 		if fileutil.Exist(snapDir) {
@@ -65,16 +68,14 @@ func (s *Snapshot) Init(epoch int64) error {
 		if err != nil {
 			return errors.Wrap(err, "snapshotting failed")
 		}
+		s.snapDir = snapDir
 
 		blockMetas, err := s.snapshotMeta(snapDir)
 		if err != nil {
 			os.RemoveAll(snapDir)
 			return err
 		}
-
 		s.blocks = blockMetas
-		s.snapDir = snapDir
-		s.epoch = epoch
 	}
 	return nil
 }

@@ -209,7 +209,7 @@ func Open(cfg *vars.StorageConfig) (*Storage, error) {
 		walSegmentSize = -1
 	}
 
-	db, err := tsdb.Open(dbDir, vars.Logger, nil, &tsdb.Options{
+	db, err := tsdb.Open(dbDir, vars.Logger, vars.PromRegistry, &tsdb.Options{
 		WALSegmentSize:         walSegmentSize,
 		RetentionDuration:      uint64(cfg.TSDB.RetentionDuration) / 1e6,
 		BlockRanges:            cfg.TSDB.BlockRanges,
@@ -221,6 +221,7 @@ func Open(cfg *vars.StorageConfig) (*Storage, error) {
 	}
 
 	opStat := new(OPStat)
+	opStat.RegistryPromMetric()
 
 	symbolsK, err := bigcache.NewBigCache(bigcache.Config{
 		Shards:             1024,
