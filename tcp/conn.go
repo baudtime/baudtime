@@ -42,7 +42,7 @@ func NewConn(c *net.TCPConn) *Conn {
 		Reader: bufio.NewReaderSize(c, 6*1e5), // We make a buffered Reader & Writer to reduce syscalls.
 		Writer: bufio.NewWriterSize(c, 2*1e5),
 		raw:    c,
-		rBuf:   make([]byte, 2*1e5),
+		rBuf:   make([]byte, 1e6),
 		rlBuf:  make([]byte, 4),
 		wlBuf:  make([]byte, 4),
 	}
@@ -91,8 +91,7 @@ func (c *Conn) ReadMsg() ([]byte, error) {
 
 	rBuf := c.rBuf
 	if cap(rBuf) < msgLen {
-		rBuf = bytesPool.Get(msgLen).([]byte)
-		defer bytesPool.Put(rBuf)
+		rBuf = make([]byte, msgLen)
 	}
 
 	_, err = io.ReadFull(c.Reader, rBuf[:msgLen])
