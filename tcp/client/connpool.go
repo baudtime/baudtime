@@ -179,7 +179,7 @@ func (pool *HostConnPool) GetConn(message msg.Message) (*Conn, error) {
 
 	c := (*Conn)(atomic.LoadPointer((*unsafe.Pointer)(unsafe.Pointer(&pool.conns[idx]))))
 
-	if c != nil && !c.Closed() {
+	if c != nil && !c.WriteClosed() {
 		return c, nil
 	}
 

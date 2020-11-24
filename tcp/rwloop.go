@@ -181,7 +181,7 @@ func (loop *ReadWriteLoop) CloseWrite() (err error) {
 }
 
 func (loop *ReadWriteLoop) WriteClosed() bool {
-	return atomic.LoadUint32(&loop.wrClosed) == 1
+	return atomic.LoadUint32(&loop.wrClosed) == 1 || atomic.LoadUint32(&loop.closed) == 1
 }
 
 func (loop *ReadWriteLoop) CloseRead() (err error) {
@@ -192,7 +192,7 @@ func (loop *ReadWriteLoop) CloseRead() (err error) {
 }
 
 func (loop *ReadWriteLoop) ReadClosed() bool {
-	return atomic.LoadUint32(&loop.rdClosed) == 1
+	return atomic.LoadUint32(&loop.rdClosed) == 1 || atomic.LoadUint32(&loop.closed) == 1
 }
 
 func (loop *ReadWriteLoop) Exit() (err error) {

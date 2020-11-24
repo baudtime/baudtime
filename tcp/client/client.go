@@ -161,6 +161,10 @@ func (c *Conn) Closed() bool {
 	return !c.rwLoop.IsRunning()
 }
 
+func (c *Conn) WriteClosed() bool {
+	return c.rwLoop.WriteClosed()
+}
+
 type Client struct {
 	name       string
 	opaque     uint64
