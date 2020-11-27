@@ -18,6 +18,7 @@ package replication
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,11 +64,9 @@ func (h *Heartbeat) start() {
 		BlkSyncOffset: getStartSyncOffset(h.db.Blocks()),
 	}
 
-	h.db.DisableCompactions()
 	var (
-		fileSyncing           *os.File
-		sleepTime             = time.Second
-		needEnableCompactions = true
+		fileSyncing *os.File
+		sleepTime   = time.Second
 	)
 
 	for h.isRunning() {
@@ -95,30 +94,34 @@ func (h *Heartbeat) start() {
 		}
 
 		if ack.BlkSyncOffset == nil {
-			if heartbeat.BlkSyncOffset != nil && heartbeat.BlkSyncOffset.Ulid != "" {
-				preBlockDir := filepath.Join(h.db.Dir(), heartbeat.BlkSyncOffset.Ulid)
-				fileutil.RenameFile(preBlockDir+".tmp", preBlockDir)
-			}
-
 			if fileSyncing != nil {
 				fileSyncing.Close()
 				fileSyncing = nil
 			}
 
-			if needEnableCompactions {
-				h.db.EnableCompactions()
-				needEnableCompactions = false
+			if heartbeat.BlkSyncOffset != nil && heartbeat.BlkSyncOffset.Ulid != "" {
+				blkDirs, err := subDirs(h.db.Dir())
+				if err != nil {
+					level.Error(Logger).Log("err", err)
+					return
+				}
+
+				for _, blkDir := range blkDirs {
+					_, _, err = readMetaFile(blkDir)
+					if err != nil {
+						os.RemoveAll(blkDir)
+					} else {
+						fileutil.RenameFile(blkDir, strings.TrimSuffix(blkDir, ".rpl.tmp"))
+					}
+				}
 			}
 
 			heartbeat.BlkSyncOffset = nil
 			time.Sleep(time.Duration(Cfg.Storage.Replication.HeartbeatInterval))
 			continue
 		} else {
-			blockTmpDir := filepath.Join(h.db.Dir(), ack.BlkSyncOffset.Ulid) + ".tmp"
+			blockTmpDir := filepath.Join(h.db.Dir(), ack.BlkSyncOffset.Ulid) + ".rpl.tmp"
 			if heartbeat.BlkSyncOffset != nil && heartbeat.BlkSyncOffset.Ulid != ack.BlkSyncOffset.Ulid {
-				preBlockDir := filepath.Join(h.db.Dir(), heartbeat.BlkSyncOffset.Ulid)
-				fileutil.RenameFile(preBlockDir+".tmp", preBlockDir)
-
 				chunksDir := filepath.Join(blockTmpDir, "chunks")
 				if err := os.MkdirAll(chunksDir, 0777); err != nil {
 					level.Error(Logger).Log("msg", "can't create chunks dir", "error", err)
@@ -169,7 +172,22 @@ func getStartSyncOffset(blocks []*tsdb.Block) *backendmsg.BlockSyncOffset {
 	}
 
 	lastBlock := blocks[len(blocks)-1]
-	os.RemoveAll(lastBlock.Dir())
+	//os.RemoveAll(lastBlock.Dir())
 
 	return &backendmsg.BlockSyncOffset{MinT: lastBlock.MinTime()}
+}
+
+func subDirs(dir string) ([]string, error) {
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var dirs []string
+
+	for _, fi := range files {
+		if fi.IsDir() && strings.HasSuffix(fi.Name(), ".rpl.tmp") {
+			dirs = append(dirs, filepath.Join(dir, fi.Name()))
+		}
+	}
+	return dirs, nil
 }

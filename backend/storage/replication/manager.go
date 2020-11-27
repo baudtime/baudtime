@@ -55,12 +55,6 @@ func NewReplicateManager(db *tsdb.DB) *ReplicateManager {
 		db:          db,
 		snapshot:    newSnapshot(db),
 	}
-
-	err := replicateMgr.loadMeta()
-	if err != nil {
-		panic(err)
-	}
-
 	return replicateMgr
 }
 
@@ -302,6 +296,10 @@ func (mgr *ReplicateManager) Meta() (m meta.ReplicaMeta) {
 }
 
 func (mgr *ReplicateManager) JoinCluster() {
+	err := mgr.loadMeta()
+	if err != nil {
+		panic(err)
+	}
 	shardID := mgr.ShardID()
 	if len(shardID) == 0 {
 		shardID = strings.Replace(uuid.NewV1().String(), "-", "", -1)
@@ -313,14 +311,7 @@ func (mgr *ReplicateManager) JoinCluster() {
 }
 
 func (mgr *ReplicateManager) LeftCluster() {
-	if mgr.heartbeat != nil {
-		mgr.heartbeat.stop()
-		mgr.syncHandshake(mgr.heartbeat.masterAddr, true)
-
-		mgr.Lock()
-		mgr.heartbeat = nil
-		mgr.Unlock()
-	}
+	mgr.Close()
 	mgr.storeMeta(meta.ReplicaMeta{
 		ShardID:    "",
 		Role:       meta.RoleUnset,
@@ -335,12 +326,19 @@ func (mgr *ReplicateManager) ShardID() string {
 func (mgr *ReplicateManager) Close() error {
 	if mgr.heartbeat != nil {
 		mgr.heartbeat.stop()
+		mgr.syncHandshake(mgr.heartbeat.masterAddr, true)
+
+		mgr.Lock()
+		mgr.heartbeat = nil
+		mgr.Unlock()
 	}
-	mgr.sampleFeeds.Range(func(name, feed interface{}) bool {
-		feed.(*sampleFeed).Close()
-		mgr.sampleFeeds.Delete(name)
-		return true
-	})
+	if mgr.sampleFeeds != nil {
+		mgr.sampleFeeds.Range(func(name, feed interface{}) bool {
+			feed.(*sampleFeed).Close()
+			mgr.sampleFeeds.Delete(name)
+			return true
+		})
+	}
 	return nil
 }
 
