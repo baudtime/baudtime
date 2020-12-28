@@ -421,23 +421,19 @@ func (storage *Storage) labelValues(name string, ms []labels.Matcher, mint, maxt
 		}
 
 		for p.Next() {
-			var minTime, maxTime int64 = math.MaxInt64, math.MinInt64
-
+			var overlapping = false
 			err := index.Series(p.At(), &lset, &chks)
 			if err != nil {
 				return nil, err
 			}
 
 			for _, chk := range chks {
-				if chk.MaxTime > maxTime {
-					maxTime = chk.MaxTime
-				}
-				if chk.MinTime < minTime {
-					minTime = chk.MinTime
+				if mint <= chk.MaxTime && chk.MinTime <= maxt {
+					overlapping = true
+					break
 				}
 			}
-
-			if mint <= maxTime && minTime <= maxt {
+			if overlapping {
 				if v := lset.Get(name); v != "" {
 					values[v] = struct{}{}
 				}
