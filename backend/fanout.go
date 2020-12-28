@@ -78,7 +78,7 @@ type fanoutQuerier struct {
 	localStorage *storage.Storage
 }
 
-func (q *fanoutQuerier) Select(params *SelectParams, matchers ...*labels.Matcher) (SeriesSet, error) {
+func (q *fanoutQuerier) Select(params *SelectHints, matchers ...*labels.Matcher) (SeriesSet, error) {
 	shardIDs, err := meta.Router().GetShardIDsByTimeSpan(time.Time(q.mint), time.Time(q.maxt), matchers...)
 	if err != nil {
 		return emptySeriesSet, err
@@ -199,7 +199,7 @@ func NewMergeQuerier(queriers []Querier) Querier {
 }
 
 // Select returns a set of series that matches the given label matchers.
-func (q *mergeQuerier) Select(params *SelectParams, matchers ...*labels.Matcher) (SeriesSet, error) {
+func (q *mergeQuerier) Select(params *SelectHints, matchers ...*labels.Matcher) (SeriesSet, error) {
 	var (
 		errors     = make([]error, len(q.queriers))
 		seriesSets = make([]SeriesSet, len(q.queriers))

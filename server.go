@@ -201,9 +201,13 @@ func Run() {
 	}
 
 	if Cfg.Gateway != nil {
-		promql.LookbackDelta = time.Duration(Cfg.LookbackDelta)
 		fanout := backend.NewFanout(localStorage)
-		queryEngine := promql.NewEngine(nil, Cfg.Gateway.QueryEngine.Concurrency, time.Duration(Cfg.Gateway.QueryEngine.Timeout))
+		queryEngine := promql.NewEngine(promql.EngineOpts{ //// Cfg.Gateway.QueryEngine.Concurrency
+			Logger:        Logger,
+			MaxSamples:    Cfg.Limit.MaxPointsTotal,
+			LookbackDelta: time.Duration(Cfg.LookbackDelta),
+			Timeout:       time.Duration(Cfg.Gateway.QueryEngine.Timeout),
+		})
 
 		if Cfg.Gateway.Rule != nil && Cfg.Gateway.Rule.RuleFileDir == "" {
 			ruleManager, err := rule.NewManager(context.Background(), Cfg.Gateway.Rule.RuleFileDir, queryEngine, fanout, Logger)

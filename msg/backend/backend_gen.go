@@ -693,33 +693,64 @@ func (z *SelectRequest) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "Step")
 				return
 			}
-		case "matchers":
+		case "func":
+			z.Func, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "Func")
+				return
+			}
+		case "grouping":
 			var zb0002 uint32
 			zb0002, err = dc.ReadArrayHeader()
+			if err != nil {
+				err = msgp.WrapError(err, "Grouping")
+				return
+			}
+			if cap(z.Grouping) >= int(zb0002) {
+				z.Grouping = (z.Grouping)[:zb0002]
+			} else {
+				z.Grouping = make([]string, zb0002)
+			}
+			for za0001 := range z.Grouping {
+				z.Grouping[za0001], err = dc.ReadString()
+				if err != nil {
+					err = msgp.WrapError(err, "Grouping", za0001)
+					return
+				}
+			}
+		case "by":
+			z.By, err = dc.ReadBool()
+			if err != nil {
+				err = msgp.WrapError(err, "By")
+				return
+			}
+		case "matchers":
+			var zb0003 uint32
+			zb0003, err = dc.ReadArrayHeader()
 			if err != nil {
 				err = msgp.WrapError(err, "Matchers")
 				return
 			}
-			if cap(z.Matchers) >= int(zb0002) {
-				z.Matchers = (z.Matchers)[:zb0002]
+			if cap(z.Matchers) >= int(zb0003) {
+				z.Matchers = (z.Matchers)[:zb0003]
 			} else {
-				z.Matchers = make([]*Matcher, zb0002)
+				z.Matchers = make([]*Matcher, zb0003)
 			}
-			for za0001 := range z.Matchers {
+			for za0002 := range z.Matchers {
 				if dc.IsNil() {
 					err = dc.ReadNil()
 					if err != nil {
-						err = msgp.WrapError(err, "Matchers", za0001)
+						err = msgp.WrapError(err, "Matchers", za0002)
 						return
 					}
-					z.Matchers[za0001] = nil
+					z.Matchers[za0002] = nil
 				} else {
-					if z.Matchers[za0001] == nil {
-						z.Matchers[za0001] = new(Matcher)
+					if z.Matchers[za0002] == nil {
+						z.Matchers[za0002] = new(Matcher)
 					}
-					err = z.Matchers[za0001].DecodeMsg(dc)
+					err = z.Matchers[za0002].DecodeMsg(dc)
 					if err != nil {
-						err = msgp.WrapError(err, "Matchers", za0001)
+						err = msgp.WrapError(err, "Matchers", za0002)
 						return
 					}
 				}
@@ -749,9 +780,9 @@ func (z *SelectRequest) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *SelectRequest) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 6
+	// map header, size 9
 	// write "mint"
-	err = en.Append(0x86, 0xa4, 0x6d, 0x69, 0x6e, 0x74)
+	err = en.Append(0x89, 0xa4, 0x6d, 0x69, 0x6e, 0x74)
 	if err != nil {
 		return
 	}
@@ -780,6 +811,43 @@ func (z *SelectRequest) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Step")
 		return
 	}
+	// write "func"
+	err = en.Append(0xa4, 0x66, 0x75, 0x6e, 0x63)
+	if err != nil {
+		return
+	}
+	err = en.WriteString(z.Func)
+	if err != nil {
+		err = msgp.WrapError(err, "Func")
+		return
+	}
+	// write "grouping"
+	err = en.Append(0xa8, 0x67, 0x72, 0x6f, 0x75, 0x70, 0x69, 0x6e, 0x67)
+	if err != nil {
+		return
+	}
+	err = en.WriteArrayHeader(uint32(len(z.Grouping)))
+	if err != nil {
+		err = msgp.WrapError(err, "Grouping")
+		return
+	}
+	for za0001 := range z.Grouping {
+		err = en.WriteString(z.Grouping[za0001])
+		if err != nil {
+			err = msgp.WrapError(err, "Grouping", za0001)
+			return
+		}
+	}
+	// write "by"
+	err = en.Append(0xa2, 0x62, 0x79)
+	if err != nil {
+		return
+	}
+	err = en.WriteBool(z.By)
+	if err != nil {
+		err = msgp.WrapError(err, "By")
+		return
+	}
 	// write "matchers"
 	err = en.Append(0xa8, 0x6d, 0x61, 0x74, 0x63, 0x68, 0x65, 0x72, 0x73)
 	if err != nil {
@@ -790,16 +858,16 @@ func (z *SelectRequest) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "Matchers")
 		return
 	}
-	for za0001 := range z.Matchers {
-		if z.Matchers[za0001] == nil {
+	for za0002 := range z.Matchers {
+		if z.Matchers[za0002] == nil {
 			err = en.WriteNil()
 			if err != nil {
 				return
 			}
 		} else {
-			err = z.Matchers[za0001].EncodeMsg(en)
+			err = z.Matchers[za0002].EncodeMsg(en)
 			if err != nil {
-				err = msgp.WrapError(err, "Matchers", za0001)
+				err = msgp.WrapError(err, "Matchers", za0002)
 				return
 			}
 		}
@@ -830,9 +898,9 @@ func (z *SelectRequest) EncodeMsg(en *msgp.Writer) (err error) {
 // MarshalMsg implements msgp.Marshaler
 func (z *SelectRequest) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 6
+	// map header, size 9
 	// string "mint"
-	o = append(o, 0x86, 0xa4, 0x6d, 0x69, 0x6e, 0x74)
+	o = append(o, 0x89, 0xa4, 0x6d, 0x69, 0x6e, 0x74)
 	o = msgp.AppendInt64(o, z.Mint)
 	// string "maxt"
 	o = append(o, 0xa4, 0x6d, 0x61, 0x78, 0x74)
@@ -840,16 +908,28 @@ func (z *SelectRequest) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "step"
 	o = append(o, 0xa4, 0x73, 0x74, 0x65, 0x70)
 	o = msgp.AppendInt64(o, z.Step)
+	// string "func"
+	o = append(o, 0xa4, 0x66, 0x75, 0x6e, 0x63)
+	o = msgp.AppendString(o, z.Func)
+	// string "grouping"
+	o = append(o, 0xa8, 0x67, 0x72, 0x6f, 0x75, 0x70, 0x69, 0x6e, 0x67)
+	o = msgp.AppendArrayHeader(o, uint32(len(z.Grouping)))
+	for za0001 := range z.Grouping {
+		o = msgp.AppendString(o, z.Grouping[za0001])
+	}
+	// string "by"
+	o = append(o, 0xa2, 0x62, 0x79)
+	o = msgp.AppendBool(o, z.By)
 	// string "matchers"
 	o = append(o, 0xa8, 0x6d, 0x61, 0x74, 0x63, 0x68, 0x65, 0x72, 0x73)
 	o = msgp.AppendArrayHeader(o, uint32(len(z.Matchers)))
-	for za0001 := range z.Matchers {
-		if z.Matchers[za0001] == nil {
+	for za0002 := range z.Matchers {
+		if z.Matchers[za0002] == nil {
 			o = msgp.AppendNil(o)
 		} else {
-			o, err = z.Matchers[za0001].MarshalMsg(o)
+			o, err = z.Matchers[za0002].MarshalMsg(o)
 			if err != nil {
-				err = msgp.WrapError(err, "Matchers", za0001)
+				err = msgp.WrapError(err, "Matchers", za0002)
 				return
 			}
 		}
@@ -899,32 +979,63 @@ func (z *SelectRequest) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "Step")
 				return
 			}
-		case "matchers":
+		case "func":
+			z.Func, bts, err = msgp.ReadStringBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "Func")
+				return
+			}
+		case "grouping":
 			var zb0002 uint32
 			zb0002, bts, err = msgp.ReadArrayHeaderBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "Grouping")
+				return
+			}
+			if cap(z.Grouping) >= int(zb0002) {
+				z.Grouping = (z.Grouping)[:zb0002]
+			} else {
+				z.Grouping = make([]string, zb0002)
+			}
+			for za0001 := range z.Grouping {
+				z.Grouping[za0001], bts, err = msgp.ReadStringBytes(bts)
+				if err != nil {
+					err = msgp.WrapError(err, "Grouping", za0001)
+					return
+				}
+			}
+		case "by":
+			z.By, bts, err = msgp.ReadBoolBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "By")
+				return
+			}
+		case "matchers":
+			var zb0003 uint32
+			zb0003, bts, err = msgp.ReadArrayHeaderBytes(bts)
 			if err != nil {
 				err = msgp.WrapError(err, "Matchers")
 				return
 			}
-			if cap(z.Matchers) >= int(zb0002) {
-				z.Matchers = (z.Matchers)[:zb0002]
+			if cap(z.Matchers) >= int(zb0003) {
+				z.Matchers = (z.Matchers)[:zb0003]
 			} else {
-				z.Matchers = make([]*Matcher, zb0002)
+				z.Matchers = make([]*Matcher, zb0003)
 			}
-			for za0001 := range z.Matchers {
+			for za0002 := range z.Matchers {
 				if msgp.IsNil(bts) {
 					bts, err = msgp.ReadNilBytes(bts)
 					if err != nil {
 						return
 					}
-					z.Matchers[za0001] = nil
+					z.Matchers[za0002] = nil
 				} else {
-					if z.Matchers[za0001] == nil {
-						z.Matchers[za0001] = new(Matcher)
+					if z.Matchers[za0002] == nil {
+						z.Matchers[za0002] = new(Matcher)
 					}
-					bts, err = z.Matchers[za0001].UnmarshalMsg(bts)
+					bts, err = z.Matchers[za0002].UnmarshalMsg(bts)
 					if err != nil {
-						err = msgp.WrapError(err, "Matchers", za0001)
+						err = msgp.WrapError(err, "Matchers", za0002)
 						return
 					}
 				}
@@ -955,12 +1066,16 @@ func (z *SelectRequest) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *SelectRequest) Msgsize() (s int) {
-	s = 1 + 5 + msgp.Int64Size + 5 + msgp.Int64Size + 5 + msgp.Int64Size + 9 + msgp.ArrayHeaderSize
-	for za0001 := range z.Matchers {
-		if z.Matchers[za0001] == nil {
+	s = 1 + 5 + msgp.Int64Size + 5 + msgp.Int64Size + 5 + msgp.Int64Size + 5 + msgp.StringPrefixSize + len(z.Func) + 9 + msgp.ArrayHeaderSize
+	for za0001 := range z.Grouping {
+		s += msgp.StringPrefixSize + len(z.Grouping[za0001])
+	}
+	s += 3 + msgp.BoolSize + 9 + msgp.ArrayHeaderSize
+	for za0002 := range z.Matchers {
+		if z.Matchers[za0002] == nil {
 			s += msgp.NilSize
 		} else {
-			s += z.Matchers[za0001].Msgsize()
+			s += z.Matchers[za0002].Msgsize()
 		}
 	}
 	s += 7 + msgp.BoolSize + 8 + msgp.BytesPrefixSize + len(z.SpanCtx)

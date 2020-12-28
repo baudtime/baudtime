@@ -34,6 +34,7 @@ import (
 	"github.com/baudtime/baudtime/msg"
 	gatewaymsg "github.com/baudtime/baudtime/msg/gateway"
 	"github.com/baudtime/baudtime/promql"
+	promql_parser "github.com/baudtime/baudtime/promql/parser"
 	"github.com/baudtime/baudtime/util"
 	ts "github.com/baudtime/baudtime/util/time"
 	"github.com/baudtime/baudtime/vars"
@@ -49,8 +50,8 @@ import (
 const Base64Suffix = "@base64"
 
 type queryResult struct {
-	ResultType promql.ValueType `json:"resultType"`
-	Result     promql.Value     `json:"result"`
+	ResultType promql_parser.ValueType `json:"resultType"`
+	Result     promql_parser.Value     `json:"result"`
 }
 
 type Gateway struct {
@@ -523,7 +524,7 @@ func (gateway *Gateway) seriesLabels(matches []string, startT, endT, timeout str
 
 	var matcherSets [][]*lb.Matcher
 	for _, match := range matches {
-		matchers, err := promql.ParseMetricSelector(match)
+		matchers, err := promql_parser.ParseMetricSelector(match)
 		if err != nil {
 			return nil, err
 		}
@@ -571,7 +572,7 @@ func (gateway *Gateway) seriesLabels(matches []string, startT, endT, timeout str
 	defer q.Close()
 
 	var (
-		params = &backend.SelectParams{OnlyLabels: true}
+		params = &backend.SelectHints{OnlyLabels: true}
 		sets   []backend.SeriesSet
 	)
 	for _, matchers := range matcherSets {
@@ -602,7 +603,7 @@ func (gateway *Gateway) labelValues(name string, matches []string, startT, endT,
 
 	var matchers []*lb.Matcher
 	for _, match := range matches {
-		ms, err := promql.ParseMetricSelector(match)
+		ms, err := promql_parser.ParseMetricSelector(match)
 		if err != nil {
 			return nil, err
 		}

@@ -3,6 +3,7 @@ package rule
 import (
 	"context"
 	"fmt"
+	"github.com/baudtime/baudtime/promql/parser"
 	"github.com/baudtime/baudtime/util"
 	htmltemplate "html/template"
 	"path/filepath"
@@ -411,7 +412,7 @@ func (m *Manager) loadGroups(files ...string) (map[string]*Group, error) {
 
 			rules := make([]Rule, 0, len(rg.Rules))
 			for _, r := range rg.Rules {
-				expr, err := promql.ParseExpr(r.Expr)
+				expr, err := parser.ParseExpr(r.Expr)
 				if err != nil {
 					return nil, err
 				}

@@ -44,7 +44,7 @@ type querier struct {
 
 // Select implements Querier and uses the given matchers to read series
 // sets from the Client.
-func (q *querier) Select(selectParams *backend.SelectParams, matchers ...*labels.Matcher) (backend.SeriesSet, error) {
+func (q *querier) Select(selectParams *backend.SelectHints, matchers ...*labels.Matcher) (backend.SeriesSet, error) {
 	queryRequest := &backendmsg.SelectRequest{
 		Mint:     q.mint,
 		Maxt:     q.maxt,

@@ -26,7 +26,7 @@ import (
 	. "github.com/baudtime/baudtime/vars"
 	"github.com/go-kit/kit/log/level"
 	"github.com/pkg/errors"
-	"github.com/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	uuid "github.com/satori/go.uuid"
 	"io"
 	"math"

@@ -48,15 +48,20 @@ type querier struct {
 
 // Select implements Querier and uses the given matchers to read series
 // sets from the Client.
-func (q *querier) Select(selectParams *SelectParams, matchers ...*labels.Matcher) (SeriesSet, error) {
+func (q *querier) Select(selectHints *SelectHints, matchers ...*labels.Matcher) (SeriesSet, error) {
 	selectRequest := &backendmsg.SelectRequest{
 		Mint:     q.mint,
 		Maxt:     q.maxt,
 		Matchers: util.MatchersToProto(matchers),
 	}
-	if selectParams != nil {
-		//selectRequest.Step = selectParams.Step
-		selectRequest.OnlyLabels = selectParams.OnlyLabels
+	if selectHints != nil {
+		selectRequest.Mint = selectHints.Start
+		selectRequest.Maxt = selectHints.End
+		selectRequest.Step = selectHints.Step
+		selectRequest.Func = selectHints.Func
+		selectRequest.By = selectHints.By
+		selectRequest.Grouping = selectHints.Grouping
+		selectRequest.OnlyLabels = selectHints.OnlyLabels
 	}
 	res, err := q.client.Select(q.ctx, selectRequest)
 	if err != nil {
@@ -156,7 +161,7 @@ type concreteSeries struct {
 }
 
 func (c *concreteSeries) Labels() labels.Labels {
-	return labels.New(c.labels...)
+	return c.labels
 }
 
 func (c *concreteSeries) Iterator() SeriesIterator {

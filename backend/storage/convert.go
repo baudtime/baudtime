@@ -3,41 +3,24 @@ package storage
 import (
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"strings"
 )
 
-func ProtoToMatchers(matchers []*backendmsg.Matcher) ([]labels.Matcher, error) {
-	result := make([]labels.Matcher, 0, len(matchers))
+func ProtoToMatchers(matchers []*backendmsg.Matcher) ([]*labels.Matcher, error) {
+	result := make([]*labels.Matcher, 0, len(matchers))
 	for _, m := range matchers {
 		result = append(result, ProtoToMatcher(m))
 	}
 	return result, nil
 }
 
-func ProtoToMatcher(m *backendmsg.Matcher) labels.Matcher {
-	switch m.Type {
-	case backendmsg.MatchType_MatchEqual:
-		return labels.NewEqualMatcher(m.Name, m.Value)
-
-	case backendmsg.MatchType_MatchNotEqual:
-		return labels.Not(labels.NewEqualMatcher(m.Name, m.Value))
-
-	case backendmsg.MatchType_MatchRegexp:
-		res, err := labels.NewRegexpMatcher(m.Name, "^(?:"+m.Value+")$")
-		if err != nil {
-			panic(err)
-		}
-		return res
-
-	case backendmsg.MatchType_MatchNotRegexp:
-		res, err := labels.NewRegexpMatcher(m.Name, "^(?:"+m.Value+")$")
-		if err != nil {
-			panic(err)
-		}
-		return labels.Not(res)
+func ProtoToMatcher(m *backendmsg.Matcher) *labels.Matcher {
+	matcher, err := labels.NewMatcher(labels.MatchType(m.Type), m.Name, m.Value)
+	if err != nil {
+		panic(err)
 	}
-	panic("storage.convertMatcher: invalid matcher type")
+	return matcher
 }
 
 func LabelsToProto(lbs labels.Labels) []msg.Label {

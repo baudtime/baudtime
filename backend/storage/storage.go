@@ -17,6 +17,13 @@ package storage
 
 import (
 	"bytes"
+	"io"
+	"math"
+	"path/filepath"
+	"reflect"
+	"sort"
+	"sync/atomic"
+
 	"github.com/baudtime/baudtime/backend/storage/replication"
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
@@ -24,21 +31,15 @@ import (
 	"github.com/baudtime/baudtime/vars"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/pkg/value"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/chunks"
-	"github.com/prometheus/tsdb/labels"
+	"github.com/prometheus/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb/chunks"
 	"github.com/shirou/gopsutil/disk"
 	"go.uber.org/multierr"
-	"io"
-	"math"
-	"path/filepath"
-	"reflect"
-	"sort"
-	"sync/atomic"
 )
 
-func selectLabelsOnly(q tsdb.Querier, matchers []labels.Matcher) ([]*msg.Series, error) {
+func selectLabelsOnly(q tsdb.Querier, matchers []*labels.Matcher) ([]*msg.Series, error) {
 	set, err := q.Select(matchers...)
 	if err != nil {
 		return nil, err
@@ -57,7 +58,7 @@ func selectLabelsOnly(q tsdb.Querier, matchers []labels.Matcher) ([]*msg.Series,
 	return series, nil
 }
 
-func selectEachStep(q tsdb.Querier, matchers []labels.Matcher, tIt *tm.TimestampIter) ([]*msg.Series, error) {
+func selectEachTs(q tsdb.Querier, matchers []*labels.Matcher, tIt *tm.TimestampIter) ([]*msg.Series, error) {
 	set, err := q.Select(matchers...)
 	if err != nil {
 		return nil, err
@@ -121,7 +122,105 @@ func selectEachStep(q tsdb.Querier, matchers []labels.Matcher, tIt *tm.Timestamp
 	return series, nil
 }
 
-func selectSeries(q tsdb.Querier, matchers []labels.Matcher, mint, maxt int64) ([]*msg.Series, error) {
+func selectWithAggregation(q tsdb.Querier, matchers []*labels.Matcher, mint, maxt int64, groupBy []string, newAggregator AggregatorCreator) ([]*msg.Series, error) {
+	set, err := q.Select(matchers...)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		aggregators []Aggregator
+		points      []msg.Point
+		it          tsdb.SeriesIterator
+	)
+
+	for set.Next() {
+		curSeries := set.At()
+
+		if len(points) > 0 {
+			points = points[:0]
+		}
+
+		it = curSeries.Iterator()
+
+		if it.Seek(mint) {
+			t, v := it.At()
+
+			if t > maxt {
+				continue
+			}
+
+			if !value.IsStaleNaN(v) {
+				points = append(points, msg.Point{T: t, V: v})
+			}
+
+			for it.Next() {
+				t, v = it.At()
+
+				if t < mint {
+					continue
+				}
+
+				if t > maxt {
+					break
+				}
+
+				if !value.IsStaleNaN(v) {
+					points = append(points, msg.Point{T: t, V: v})
+				}
+			}
+		}
+
+		err = it.Err()
+		if err != nil {
+			return nil, err
+		}
+
+		if len(points) > 0 {
+			lbs := msg.Labels{msg.Label{
+				Name:  "aggr",
+				Value: vars.LocalIP,
+			}}
+
+			if len(groupBy) != 0 {
+				for i, name := range groupBy {
+					lbs = append(lbs, msg.Label{Name: groupBy[i], Value: curSeries.Labels().Get(name)})
+				}
+			}
+
+			var aggregator Aggregator
+
+			for i := len(aggregators) - 1; i >= 0; i-- {
+				d := msg.Compare(aggregators[i].GetLabels(), lbs)
+				if d < 0 {
+					break
+				} else if d == 0 {
+					aggregator = aggregators[i]
+					break
+				}
+			}
+
+			if aggregator == nil {
+				aggregator = newAggregator(lbs)
+				aggregators = append(aggregators, aggregator)
+			}
+
+			aggregator.Aggregate(points...)
+		}
+	}
+
+	series := make([]*msg.Series, 0, len(aggregators))
+	for _, aggr := range aggregators {
+		series = append(series, &msg.Series{
+			Labels: aggr.GetLabels(),
+			Points: aggr.GetPoints(),
+		})
+	}
+
+	return series, nil
+}
+
+func selectSeries(q tsdb.Querier, matchers []*labels.Matcher, mint, maxt int64) ([]*msg.Series, error) {
 	set, err := q.Select(matchers...)
 	if err != nil {
 		return nil, err
@@ -288,7 +387,7 @@ func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *back
 		series []*msg.Series
 	)
 
-	if (request.Mint == request.Maxt && request.Step == 0) || (request.Mint < request.Maxt && request.Step > 0) {
+	if request.Mint == request.Maxt {
 		q, err = storage.DB.Querier(request.Mint-tm.DurationMilliSec(vars.Cfg.LookbackDelta), request.Maxt)
 		if err != nil {
 			queryResponse.ErrorMsg = err.Error()
@@ -296,8 +395,8 @@ func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *back
 		}
 		defer q.Close()
 
-		series, err = selectEachStep(q, matchers, tm.NewTimestampIter(request.Mint, request.Maxt, request.Step))
-	} else if request.Mint < request.Maxt && request.Step == 0 {
+		series, err = selectEachTs(q, matchers, tm.NewTimestampIter(request.Mint, request.Maxt, request.Step))
+	} else if request.Mint < request.Maxt {
 		q, err = storage.DB.Querier(request.Mint, request.Maxt)
 		if err != nil {
 			queryResponse.ErrorMsg = err.Error()
@@ -308,7 +407,12 @@ func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *back
 		if request.OnlyLabels {
 			series, err = selectLabelsOnly(q, matchers)
 		} else {
-			series, err = selectSeries(q, matchers, request.Mint, request.Maxt)
+			aggregatorCreator := GetAggregatorCreator(request.Func)
+			if aggregatorCreator != nil {
+				series, err = selectWithAggregation(q, matchers, request.Mint, request.Maxt, request.Grouping, aggregatorCreator)
+			} else {
+				series, err = selectSeries(q, matchers, request.Mint, request.Maxt)
+			}
 		}
 	} else {
 		queryResponse.ErrorMsg = "parameter error"
@@ -376,8 +480,8 @@ func (storage *Storage) HandleLabelValuesReq(request *backendmsg.LabelValuesRequ
 	return queryResponse
 }
 
-func (storage *Storage) labelValues(name string, ms []labels.Matcher, mint, maxt int64) ([]string, error) {
-	m, err := labels.NewRegexpMatcher(name, ".*")
+func (storage *Storage) labelValues(name string, ms []*labels.Matcher, mint, maxt int64) ([]string, error) {
+	m, err := labels.NewMatcher(labels.MatchRegexp, name, ".*")
 	if err != nil {
 		return nil, err
 	}
@@ -442,7 +546,7 @@ func (storage *Storage) labelValues(name string, ms []labels.Matcher, mint, maxt
 	}
 
 	res := make([]string, 0, len(values))
-	for v, _ := range values {
+	for v := range values {
 		res = append(res, v)
 	}
 	sort.Strings(res)

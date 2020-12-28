@@ -220,7 +220,7 @@ func (pool *HostConnPool) Close() error {
 	return multiErr
 }
 
-var dummyErr error = errors.New("dummy conn, not real")
+var dummyErr = errors.New("dummy conn, not real")
 
 type dummyPool struct{}
 

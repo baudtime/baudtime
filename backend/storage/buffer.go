@@ -14,7 +14,7 @@
 package storage
 
 import (
-	"github.com/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 	"math"
 )
 

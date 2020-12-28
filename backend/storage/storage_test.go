@@ -17,13 +17,14 @@ package storage
 
 import (
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/vars"
-	"github.com/prometheus/tsdb"
-	"github.com/prometheus/tsdb/labels"
-	"testing"
-	"time"
+	"github.com/prometheus/prometheus/pkg/labels"
+	"github.com/prometheus/prometheus/tsdb"
 )
 
 func TestAPI_Bench(t *testing.T) {

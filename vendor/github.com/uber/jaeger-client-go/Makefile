@@ -1,5 +1,5 @@
 PROJECT_ROOT=github.com/uber/jaeger-client-go
-PACKAGES := $(shell go list ./... | awk -F/ 'NR>1 {print "./"$$4"/..."}' | grep -v -e ./thrift-gen/... -e ./thrift/... | sort -u)
+PACKAGES := . $(shell go list ./... | awk -F/ 'NR>1 {print "./"$$4"/..."}' | grep -v -e ./thrift-gen/... -e ./thrift/... | sort -u)
 # all .go files that don't exist in hidden directories
 ALL_SRC := $(shell find . -name "*.go" | grep -v -e vendor -e thrift-gen -e ./thrift/ \
         -e ".*/\..*" \
@@ -83,8 +83,12 @@ cover-html: cover
 test-examples:
 	make -C examples
 
+.PHONY: thrift
+thrift: idl-submodule thrift-compile
+
 # TODO at the moment we're not generating tchan_*.go files
-thrift: idl-submodule thrift-image
+.PHONY: thrift-compile
+thrift-compile: thrift-image
 	$(THRIFT) -o /data --gen go:$(THRIFT_GO_ARGS) --out /data/$(THRIFT_GEN_DIR) /data/idl/thrift/agent.thrift
 	$(THRIFT) -o /data --gen go:$(THRIFT_GO_ARGS) --out /data/$(THRIFT_GEN_DIR) /data/idl/thrift/sampling.thrift
 	$(THRIFT) -o /data --gen go:$(THRIFT_GO_ARGS) --out /data/$(THRIFT_GEN_DIR) /data/idl/thrift/jaeger.thrift
@@ -99,10 +103,12 @@ thrift: idl-submodule thrift-image
 	rm -rf crossdock/thrift/*/*-remote
 	rm -rf thrift-gen/jaeger/collector.go
 
+.PHONY: idl-submodule
 idl-submodule:
 	git submodule init
 	git submodule update
 
+.PHONY: thrift-image
 thrift-image:
 	$(THRIFT) -version
 
@@ -125,3 +131,4 @@ ifeq ($(CI_SKIP_LINT),true)
 else
 	make lint
 endif
+

@@ -2,7 +2,10 @@
 
 package msg
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 type StatusCode byte
 
@@ -35,6 +38,24 @@ func (ls Labels) Map() map[string]string {
 		m[l.Name] = l.Value
 	}
 	return m
+}
+
+func Compare(a, b Labels) int {
+	l := len(a)
+	if len(b) < l {
+		l = len(b)
+	}
+
+	for i := 0; i < l; i++ {
+		if d := strings.Compare(a[i].Name, b[i].Name); d != 0 {
+			return d
+		}
+		if d := strings.Compare(a[i].Value, b[i].Value); d != 0 {
+			return d
+		}
+	}
+	// If all labels so far were in common, the set with fewer labels comes first.
+	return len(a) - len(b)
 }
 
 //msgp:tuple Series

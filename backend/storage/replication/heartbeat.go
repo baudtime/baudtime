@@ -32,7 +32,7 @@ import (
 	t "github.com/baudtime/baudtime/util/time"
 	. "github.com/baudtime/baudtime/vars"
 	"github.com/go-kit/kit/log/level"
-	"github.com/prometheus/tsdb"
+	"github.com/prometheus/prometheus/tsdb"
 )
 
 const (

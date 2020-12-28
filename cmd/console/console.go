@@ -48,8 +48,10 @@ func main() {
 	addr := fmt.Sprintf("%s:%d", *ip, *port)
 
 	exec := &executor{
-		addr:        addr,
-		queryEngine: promql.NewEngine(nil, 20, queryTimeout),
+		addr: addr,
+		queryEngine: promql.NewEngine(promql.EngineOpts{
+			Timeout: queryTimeout,
+		}),
 	}
 	checkErr(exec.reconnect())
 

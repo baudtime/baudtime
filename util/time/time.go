@@ -61,7 +61,7 @@ func (it *TimestampIter) Next() bool {
 	}
 
 	cur := it.cur + it.interval
-	if cur <= it.maxt {
+	if cur < it.maxt {
 		it.cur = cur
 		return true
 	}
@@ -75,6 +75,25 @@ func (it *TimestampIter) At() int64 {
 
 func (it *TimestampIter) Reset() {
 	it.cur = 0
+}
+
+type TimeStepIter struct {
+	*TimestampIter
+}
+
+func NewTimeStepIter(mint int64, maxt int64, interval int64) *TimeStepIter {
+	return &TimeStepIter{
+		TimestampIter: &TimestampIter{mint, maxt, interval, 0},
+	}
+}
+
+func (it *TimeStepIter) At() (mint, maxt int64) {
+	mint = it.cur
+	maxt = it.cur + it.interval
+	if maxt > it.maxt {
+		maxt = it.maxt
+	}
+	return
 }
 
 func Exponential(d, min, max time.Duration) time.Duration {

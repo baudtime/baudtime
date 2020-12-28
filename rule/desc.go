@@ -1,7 +1,7 @@
 package rule
 
 import (
-	"github.com/baudtime/baudtime/promql"
+	"github.com/baudtime/baudtime/promql/parser"
 	"github.com/baudtime/baudtime/util/toml"
 	"github.com/pkg/errors"
 	"github.com/prometheus/common/model"
@@ -81,7 +81,7 @@ func (desc *RuleDesc) Validate() (errs []error) {
 
 	if desc.Expr == "" {
 		errs = append(errs, errors.Errorf("field 'expr' must be set in rule"))
-	} else if _, err := promql.ParseExpr(desc.Expr); err != nil {
+	} else if _, err := parser.ParseExpr(desc.Expr); err != nil {
 		errs = append(errs, errors.Errorf("could not parse expression: %s", err))
 	}
 

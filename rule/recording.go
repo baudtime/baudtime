@@ -8,8 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/baudtime/baudtime/promql"
 	"github.com/BurntSushi/toml"
+	"github.com/baudtime/baudtime/promql"
+	promql_parser "github.com/baudtime/baudtime/promql/parser"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/util/strutil"
 )
@@ -17,14 +18,14 @@ import (
 // A RecordingRule records its vector expression into new timeseries.
 type RecordingRule struct {
 	name           string
-	vector         promql.Expr
+	vector         promql_parser.Expr
 	labels         labels.Labels
 	mtx            sync.Mutex
 	evaluationTime time.Duration
 }
 
 // NewRecordingRule returns a new recording rule.
-func NewRecordingRule(name string, vector promql.Expr, lset labels.Labels) *RecordingRule {
+func NewRecordingRule(name string, vector promql_parser.Expr, lset labels.Labels) *RecordingRule {
 	return &RecordingRule{
 		name:   name,
 		vector: vector,

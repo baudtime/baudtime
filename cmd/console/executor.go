@@ -19,20 +19,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/baudtime/baudtime"
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
 	"github.com/baudtime/baudtime/promql"
+	promql_parser "github.com/baudtime/baudtime/promql/parser"
 	ts "github.com/baudtime/baudtime/util/time"
 	"github.com/pkg/errors"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type queryResult struct {
-	ResultType promql.ValueType `json:"resultType"`
-	Result     promql.Value     `json:"result"`
+	ResultType promql_parser.ValueType `json:"resultType"`
+	Result     promql_parser.Value     `json:"result"`
 }
 
 type executor struct {

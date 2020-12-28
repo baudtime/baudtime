@@ -41,8 +41,8 @@ type Queryable interface {
 // Querier provides reading access to time series data.
 type Querier interface {
 	// Select returns a set of series that matches the given label matchers.
-	//Select(*SelectParams, ...*labels.Matcher) (SeriesSet, error)
-	Select(*SelectParams, ...*labels.Matcher) (SeriesSet, error)
+	//Select(*SelectHints, ...*labels.Matcher) (SeriesSet, error)
+	Select(*SelectHints, ...*labels.Matcher) (SeriesSet, error)
 	// LabelValues returns all potential values for a label name.
 	LabelValues(string, ...*labels.Matcher) ([]string, error)
 
@@ -56,11 +56,20 @@ type Appender interface {
 	Flush() error
 }
 
-// SelectParams specifies parameters passed to data selections.
-type SelectParams struct {
-	Step       int64  // Query step size in milliseconds.
-	OnlyLabels bool   // Query meta data only, no samples, only labels
-	Func       string // String representation of surrounding function or aggregation.
+// SelectHints specifies hints passed for data selections.
+// This is used only as an option for implementation to use.
+type SelectHints struct {
+	Start int64 // Start time in milliseconds for this select.
+	End   int64 // End time in milliseconds for this select.
+
+	Step int64  // Query step size in milliseconds.
+	Func string // String representation of surrounding function or aggregation.
+
+	Grouping []string // List of label names used in aggregation.
+	By       bool     // Indicate whether it is without or by.
+	Range    int64    // Range vector selector range in milliseconds.
+
+	OnlyLabels bool // Query meta data only, no samples, only labels
 }
 
 // SeriesSet contains a set of series.
