@@ -17,19 +17,9 @@ package storage
 
 import (
 	"bytes"
-	"io"
-	"math"
-	"path/filepath"
-	"reflect"
-	"sort"
-	"sync/atomic"
-	"time"
-
-	"github.com/allegro/bigcache/v2"
 	"github.com/baudtime/baudtime/backend/storage/replication"
 	"github.com/baudtime/baudtime/msg"
 	backendmsg "github.com/baudtime/baudtime/msg/backend"
-	"github.com/baudtime/baudtime/util"
 	tm "github.com/baudtime/baudtime/util/time"
 	"github.com/baudtime/baudtime/vars"
 	"github.com/opentracing/opentracing-go"
@@ -40,6 +30,12 @@ import (
 	"github.com/prometheus/tsdb/labels"
 	"github.com/shirou/gopsutil/disk"
 	"go.uber.org/multierr"
+	"io"
+	"math"
+	"path/filepath"
+	"reflect"
+	"sort"
+	"sync/atomic"
 )
 
 func selectLabelsOnly(q tsdb.Querier, matchers []labels.Matcher) ([]*msg.Series, error) {
@@ -223,37 +219,37 @@ func Open(cfg *vars.StorageConfig) (*Storage, error) {
 	opStat := new(OPStat)
 	opStat.RegistryPromMetric()
 
-	symbolsK, err := bigcache.NewBigCache(bigcache.Config{
-		Shards:             1024,
-		LifeWindow:         24 * time.Hour,
-		MaxEntriesInWindow: 1000 * 10 * 60,
-		MaxEntrySize:       500,
-		Verbose:            false,
-		Hasher:             util.NewHasher(),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	symbolsV, err := bigcache.NewBigCache(bigcache.Config{
-		Shards:             1 << 16,
-		LifeWindow:         24 * time.Hour,
-		MaxEntriesInWindow: 1000 * 10 * 60,
-		MaxEntrySize:       500,
-		Verbose:            false,
-		Hasher:             util.NewHasher(),
-	})
-	if err != nil {
-		return nil, err
-	}
+	//symbolsK, err := bigcache.NewBigCache(bigcache.Config{
+	//	Shards:             1024,
+	//	LifeWindow:         24 * time.Hour,
+	//	MaxEntriesInWindow: 1000 * 10 * 60,
+	//	MaxEntrySize:       500,
+	//	Verbose:            false,
+	//	Hasher:             util.NewHasher(),
+	//})
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//symbolsV, err := bigcache.NewBigCache(bigcache.Config{
+	//	Shards:             1 << 16,
+	//	LifeWindow:         24 * time.Hour,
+	//	MaxEntriesInWindow: 1000 * 10 * 60,
+	//	MaxEntrySize:       500,
+	//	Verbose:            false,
+	//	Hasher:             util.NewHasher(),
+	//})
+	//if err != nil {
+	//	return nil, err
+	//}
 
 	return &Storage{
 		DB: db,
 		AddReqHandler: &AddReqHandler{
 			appender: db.Appender,
 			opStat:   opStat,
-			symbolsK: symbolsK,
-			symbolsV: symbolsV,
+			//symbolsK: symbolsK,
+			//symbolsV: symbolsV,
 		},
 		ReplicateManager: replication.NewReplicateManager(db),
 		OpStat:           opStat,
@@ -508,8 +504,8 @@ func (storage *Storage) Info(detailed bool) (Stat, error) {
 type AddReqHandler struct {
 	appender func() tsdb.Appender
 	opStat   *OPStat
-	symbolsK *bigcache.BigCache
-	symbolsV *bigcache.BigCache
+	//symbolsK *bigcache.BigCache
+	//symbolsV *bigcache.BigCache
 }
 
 func (addReqHandler *AddReqHandler) HandleAddReq(request *backendmsg.AddRequest) error {
@@ -527,20 +523,24 @@ func (addReqHandler *AddReqHandler) HandleAddReq(request *backendmsg.AddRequest)
 			} else {
 				lset := make([]labels.Label, len(series.Labels))
 
+				//for i, lb := range series.Labels {
+				//	if symbol, err := addReqHandler.symbolsK.Get(lb.Name); err == nil {
+				//		lset[i].Name = util.YoloString(symbol)
+				//	} else {
+				//		lset[i].Name = lb.Name
+				//		addReqHandler.symbolsK.Set(lset[i].Name, util.YoloBytes(lset[i].Name))
+				//	}
+				//
+				//	if symbol, err := addReqHandler.symbolsV.Get(lb.Value); err == nil {
+				//		lset[i].Value = util.YoloString(symbol)
+				//	} else {
+				//		lset[i].Value = lb.Value
+				//		addReqHandler.symbolsV.Set(lset[i].Value, util.YoloBytes(lset[i].Value))
+				//	}
+				//}
 				for i, lb := range series.Labels {
-					if symbol, err := addReqHandler.symbolsK.Get(lb.Name); err == nil {
-						lset[i].Name = util.YoloString(symbol)
-					} else {
-						lset[i].Name = lb.Name
-						addReqHandler.symbolsK.Set(lset[i].Name, util.YoloBytes(lset[i].Name))
-					}
-
-					if symbol, err := addReqHandler.symbolsV.Get(lb.Value); err == nil {
-						lset[i].Value = util.YoloString(symbol)
-					} else {
-						lset[i].Value = lb.Value
-						addReqHandler.symbolsV.Set(lset[i].Value, util.YoloBytes(lset[i].Value))
-					}
+					lset[i].Name = lb.Name
+					lset[i].Value = lb.Value
 				}
 
 				ref, err = app.Add(lset, p.T, p.V)

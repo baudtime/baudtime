@@ -4,7 +4,6 @@ go 1.13
 
 require (
 	github.com/BurntSushi/toml v0.3.1
-	github.com/allegro/bigcache/v2 v2.1.5
 	github.com/buaazp/fasthttprouter v0.1.1
 	github.com/cespare/xxhash/v2 v2.1.1
 	github.com/fsnotify/fsnotify v1.4.7
@@ -13,7 +12,7 @@ require (
 	github.com/oklog/ulid v1.3.1
 	github.com/opentracing/opentracing-go v1.1.0
 	github.com/peterh/liner v1.1.0
-	github.com/philhofer/fwd v1.0.0
+	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/pkg/errors v0.8.1
 	github.com/prometheus/client_golang v1.0.0
 	github.com/prometheus/common v0.6.0

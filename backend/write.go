@@ -98,15 +98,16 @@ func newAppender(shardID string, localStorage *storage.Storage) (*appender, erro
 			exeQuery:     visitor.NOOP,
 		},
 	}
-	for i := range app.series {
-		app.series[i] = seriesHashMap{}
-	}
 
 	return app, nil
 }
 
 func (app *appender) Add(l []msg.Label, t int64, v float64, hash uint64) error {
 	i := hash & stripeMask
+
+	if app.series[i] == nil {
+		app.series[i] = seriesHashMap{}
+	}
 
 	s := app.series[i].get(hash, l)
 	if s == nil {
@@ -131,6 +132,7 @@ func (app *appender) Flush() error {
 			differentHash++
 			lastHash = hash
 		}
+		app.series[i] = nil
 	}
 	if len(app.toFlush.Series) == 0 {
 		return nil
