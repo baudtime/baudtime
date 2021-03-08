@@ -58,7 +58,109 @@ func selectLabelsOnly(q tsdb.Querier, matchers []*labels.Matcher) ([]*msg.Series
 	return series, nil
 }
 
-func selectEachTs(q tsdb.Querier, matchers []*labels.Matcher, tIt *tm.TimestampIter) ([]*msg.Series, error) {
+func selectEachStepWithAggregation(q tsdb.Querier, matchers []*labels.Matcher, tIt *tm.TimeStepIter, groupBy []string, newAggregator AggregatorCreator) ([]*msg.Series, error) {
+	set, err := q.Select(matchers...)
+	if err != nil {
+		return nil, err
+	}
+
+	var (
+		aggregators []Aggregator
+		points      []msg.Point
+		it          tsdb.SeriesIterator
+	)
+
+	for set.Next() {
+		curSeries := set.At()
+
+		if len(points) > 0 {
+			points = points[:0]
+		}
+
+		it = curSeries.Iterator()
+
+		for tIt.Next() {
+			mint, maxt := tIt.At()
+
+			if it.Seek(mint) {
+				t, v := it.At()
+
+				if t > maxt {
+					continue
+				}
+
+				if !value.IsStaleNaN(v) {
+					points = append(points, msg.Point{T: t, V: v})
+				}
+
+				for it.Next() {
+					t, v = it.At()
+
+					if t < mint {
+						continue
+					}
+
+					if t > maxt {
+						break
+					}
+
+					if !value.IsStaleNaN(v) {
+						points = append(points, msg.Point{T: t, V: v})
+					}
+				}
+			}
+
+			err = it.Err()
+			if err != nil {
+				return nil, err
+			}
+
+			if len(points) > 0 {
+				lbs := msg.Labels{msg.Label{
+					Name:  "aggr",
+					Value: vars.LocalIP,
+				}}
+
+				if len(groupBy) != 0 {
+					for i, name := range groupBy {
+						lbs = append(lbs, msg.Label{Name: groupBy[i], Value: curSeries.Labels().Get(name)})
+					}
+				}
+
+				var aggregator Aggregator
+
+				for i := len(aggregators) - 1; i >= 0; i-- {
+					d := msg.Compare(aggregators[i].GetLabels(), lbs)
+					if d < 0 {
+						break
+					} else if d == 0 {
+						aggregator = aggregators[i]
+						break
+					}
+				}
+
+				if aggregator == nil {
+					aggregator = newAggregator(lbs)
+					aggregators = append(aggregators, aggregator)
+				}
+
+				aggregator.Aggregate(points...)
+			}
+		}
+	}
+
+	series := make([]*msg.Series, 0, len(aggregators))
+	for _, aggr := range aggregators {
+		series = append(series, &msg.Series{
+			Labels: aggr.GetLabels(),
+			Points: aggr.GetPoints(),
+		})
+	}
+
+	return series, nil
+}
+
+func selectEachStep(q tsdb.Querier, matchers []*labels.Matcher, tIt *tm.TimestampIter) ([]*msg.Series, error) {
 	set, err := q.Select(matchers...)
 	if err != nil {
 		return nil, err
@@ -387,7 +489,7 @@ func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *back
 		series []*msg.Series
 	)
 
-	if request.Mint == request.Maxt {
+	if (request.Mint == request.Maxt && request.Step == 0) || (request.Mint < request.Maxt && request.Step > 0) {
 		q, err = storage.DB.Querier(request.Mint-tm.DurationMilliSec(vars.Cfg.LookbackDelta), request.Maxt)
 		if err != nil {
 			queryResponse.ErrorMsg = err.Error()
@@ -395,8 +497,13 @@ func (storage *Storage) HandleSelectReq(request *backendmsg.SelectRequest) *back
 		}
 		defer q.Close()
 
-		series, err = selectEachTs(q, matchers, tm.NewTimestampIter(request.Mint, request.Maxt, request.Step))
-	} else if request.Mint < request.Maxt {
+		aggregatorCreator := GetStepAggregatorCreator(request.Func)
+		if aggregatorCreator != nil {
+			series, err = selectEachStepWithAggregation(q, matchers, tm.NewTimeStepIter(request.Mint, request.Maxt, request.Step), request.Grouping, aggregatorCreator)
+		} else {
+			series, err = selectEachStep(q, matchers, tm.NewTimestampIter(request.Mint, request.Maxt, request.Step))
+		}
+	} else if request.Mint < request.Maxt && request.Step == 0 {
 		q, err = storage.DB.Querier(request.Mint, request.Maxt)
 		if err != nil {
 			queryResponse.ErrorMsg = err.Error()

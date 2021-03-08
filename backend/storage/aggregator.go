@@ -32,6 +32,24 @@ type Aggregator interface {
 
 type AggregatorCreator func(labels []msg.Label) Aggregator
 
+func GetStepAggregatorCreator(name string) AggregatorCreator {
+	switch strings.ToLower(name) {
+	case "sumovertime":
+		return func(labels []msg.Label) Aggregator {
+			return &SumOverTime{labels: labels}
+		}
+	case "minovertime":
+		return func(labels []msg.Label) Aggregator {
+			return &MinOverTime{labels: labels}
+		}
+	case "maxovertime":
+		return func(labels []msg.Label) Aggregator {
+			return &MaxOverTime{labels: labels}
+		}
+	}
+	return nil
+}
+
 func GetAggregatorCreator(name string) AggregatorCreator {
 	switch strings.ToLower(name) {
 	case "sum":
@@ -192,5 +210,110 @@ func (max *Max) GetPoints() []msg.Point {
 func (max *Max) Reset() {
 	if max.points != nil {
 		max.points = max.points[:0]
+	}
+}
+
+//SumOverTime
+type SumOverTime struct {
+	labels []msg.Label
+	points []msg.Point
+}
+
+func (s *SumOverTime) Aggregate(points ...msg.Point) {
+	if len(points) == 0 {
+		return
+	}
+	aggPoint := msg.Point{
+		T : points[len(points)-1].T,
+	}
+	for _, point := range points {
+		aggPoint.V += point.V
+	}
+	s.points = append(s.points, aggPoint)
+}
+
+func (s *SumOverTime) GetLabels() msg.Labels {
+	return s.labels
+}
+
+func (s *SumOverTime) GetPoints() []msg.Point {
+	return s.points
+}
+
+func (s *SumOverTime) Reset() {
+	if s.points != nil {
+		s.points = s.points[:0]
+	}
+}
+
+//MinOverTime
+type MinOverTime struct {
+	labels []msg.Label
+	points []msg.Point
+}
+
+func (s *MinOverTime) Aggregate(points ...msg.Point) {
+	if len(points) == 0 {
+		return
+	}
+	aggPoint := msg.Point{
+		T : points[len(points)-1].T,
+		V : points[len(points)-1].V,
+	}
+	for _, point := range points {
+		if point.V < aggPoint.V {
+			aggPoint.V = point.V
+		}
+	}
+	s.points = append(s.points, aggPoint)
+}
+
+func (s *MinOverTime) GetLabels() msg.Labels {
+	return s.labels
+}
+
+func (s *MinOverTime) GetPoints() []msg.Point {
+	return s.points
+}
+
+func (s *MinOverTime) Reset() {
+	if s.points != nil {
+		s.points = s.points[:0]
+	}
+}
+
+//MaxOverTime
+type MaxOverTime struct {
+	labels []msg.Label
+	points []msg.Point
+}
+
+func (s *MaxOverTime) Aggregate(points ...msg.Point) {
+	if len(points) == 0 {
+		return
+	}
+	aggPoint := msg.Point{
+		T : points[len(points)-1].T,
+		V : points[len(points)-1].V,
+	}
+	for _, point := range points {
+		if point.V > aggPoint.V{
+			aggPoint.V = point.V
+		}
+	}
+	s.points = append(s.points, aggPoint)
+}
+
+func (s *MaxOverTime) GetLabels() msg.Labels {
+	return s.labels
+}
+
+func (s *MaxOverTime) GetPoints() []msg.Point {
+	return s.points
+}
+
+func (s *MaxOverTime) Reset() {
+	if s.points != nil {
+		s.points = s.points[:0]
 	}
 }
